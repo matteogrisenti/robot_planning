@@ -1,0 +1,3 @@
+[submodule "loco_nav"]
+	path = loco_nav
+	url = ./loco_nav
