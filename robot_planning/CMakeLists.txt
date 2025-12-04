@@ -119,7 +119,7 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
-# include
+  include
   ${catkin_INCLUDE_DIRS}
 )
 
@@ -127,6 +127,7 @@ include_directories(
 # add_library(${PROJECT_NAME}
 #   src/${PROJECT_NAME}/robot_planning.cpp
 # )
+add_library(dubins_library src/dubins_trajectory.cpp)
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
@@ -140,7 +141,7 @@ include_directories(
 
 ## Data verifier node for testing
 add_executable(data_verifier_node src/data_verifier_node.cpp)
-target_link_libraries(data_verifier_node ${catkin_LIBRARIES})
+target_link_libraries(data_verifier_node ${catkin_LIBRARIES} dubins_library)
 add_dependencies(data_verifier_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 
