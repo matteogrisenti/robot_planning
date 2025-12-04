@@ -250,6 +250,23 @@ Visualization Manager:
         victims_weight: true
       Queue Size: 100
       Value: true
+    - Alpha: 1
+      Arrow Length: 0.5
+      Axes Length: 0.3
+      Axes Radius: 0.05
+      Class: rviz/PoseArray
+      Color: 255; 25; 0
+      Enabled: true
+      Head Length: 0.2
+      Head Radius: 0.1
+      Name: Gates
+      Queue Size: 10
+      Shaft Length: 0.3
+      Shaft Radius: 0.05
+      Shape: Arrow (Flat)
+      Topic: /gates
+      Unreliable: false
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 247; 247; 247
