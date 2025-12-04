@@ -22,9 +22,9 @@
 
     <!-- Set parameters in param server-->
     <!-- Set ROS parameters as vectors -->
-    <param name="x_pos_init" value="(arg x_pos)" type="yaml"/>
-    <param name="y_pos_init" value="(arg y_pos)" type="yaml"/>
-    <param name="yaw_pos_init" value="(arg yaw_pos)" type="yaml"/>
+    <param name="x_pos_init" value="[$(arg x_pos)]" type="yaml"/>
+    <param name="y_pos_init" value="[$(arg y_pos)]" type="yaml"/>
+    <param name="yaw_pos_init" value="[$(arg yaw_pos)]" type="yaml"/>
     <param name="use_sim_time" value="true" />
 
     <!-- Spawn map publishes borders and obstacles-->
