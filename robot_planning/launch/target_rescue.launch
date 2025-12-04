@@ -67,5 +67,9 @@
     <!--static    TF -->
     <node pkg="tf2_ros" type="static_transform_publisher" name="map_to_limo$(arg robot_id)_odom"
       args="0 0 0 0 0 0 map limo$(arg robot_id)/odom" />
+    
+    <!-- Launch RViz for visualization -->
+    <node if="$(arg use_rviz)" pkg="rviz" type="rviz" name="rviz" 
+          args="-d $(find robot_planning)/rviz/target_rescue.rviz" />
       
 </launch>
