@@ -12,21 +12,19 @@ long double round_up
 	return std::ceil(value * multiplier) / multiplier;
 }
 
-long double sinc
-(long double t)
+long double sinc(long double t)
 {
-	long double out;
-	if
-	(std::abs(t) < 0.002)
-	{
-		out = 1 - std::pow(t,2.0/6.0) * (1 - std::pow(t,2.0/20.0));
-	}
-	else
-	{
-		out = std::sin(t) / t;
-	}
-
-	return out;
+    long double out;
+    if (std::abs(t) < 0.002)
+    {
+        // Era std::pow(t, 2.0/6.0)
+        out = 1.0 - (t * t / 6.0) * (1.0 - (t * t / 20.0));
+    }
+    else
+    {
+        out = std::sin(t) / t;
+    }
+    return out;
 }
 
 long double mod2pi
