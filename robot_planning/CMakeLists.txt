@@ -123,25 +123,17 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 
-## Declare a C++ library
-# add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/robot_planning.cpp
-# )
 add_library(dubins_library src/dubins_trajectory.cpp)
+add_library(collision_checker_lib src/collision_checker.cpp)
 
-## Add cmake target dependencies of the library
-## as an example, code may need to be generated before libraries
-## either from message generation or dynamic reconfigure
-# add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-
-## Declare a C++ executable
-## With catkin_make all packages are built within a single CMake context
-## The recommended prefix ensures that target names across packages don't collide
-# add_executable(${PROJECT_NAME}_node src/robot_planning_node.cpp)
-
-## Data verifier node for testing
 add_executable(data_verifier_node src/data_verifier_node.cpp)
-target_link_libraries(data_verifier_node ${catkin_LIBRARIES} dubins_library)
+
+target_link_libraries(data_verifier_node 
+  ${catkin_LIBRARIES} 
+  dubins_library 
+  collision_checker_lib
+)
+
 add_dependencies(data_verifier_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 

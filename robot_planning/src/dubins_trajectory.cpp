@@ -399,7 +399,7 @@ void dubins_shortest_path
 	}
 
 	for
-	(size_t i = 0; i < primitives.size(); i++)
+	(size_t i = 0; i < primitives.size(); i++) // Compute all possible candidates paths
 	{
 		if
 		(DEBUG)
@@ -408,10 +408,10 @@ void dubins_shortest_path
 		}
 
 		primitives[i](sc_th0, sc_thf, sc_Kmax, sc_s1_c, sc_s2_c, sc_s3_c, ok);
-		Lcur = sc_s1_c + sc_s2_c + sc_s3_c;
+		Lcur = sc_s1_c + sc_s2_c + sc_s3_c; // Measure total length of each path
 
 		if
-		(ok && Lcur < L)
+		(ok && Lcur < L) // Check if path is valid and shorter than current best path
 		{
 			L = round_up((Lcur),4);
 			sc_s1 = round_up((sc_s1_c),4);
