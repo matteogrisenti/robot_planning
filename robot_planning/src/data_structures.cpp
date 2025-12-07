@@ -411,7 +411,6 @@ std::string Victims::to_string() const {
 
 
 // ============== Roadmap ==============
-Roadmap::Roadmap() = default;
 void Roadmap::paint_roadmap() {
     ROS_INFO("[Roadmap] Starting visualization...");
 
@@ -571,19 +570,18 @@ void Roadmap::paint_roadmap() {
     cv::putText(canvas, "Borders (Black) | Obstacles (Red) | Victims (Purple) | Gates (Green)", 
                 cv::Point(20, 30), cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(50, 50, 50), 2);
 
-    /* 6. SAVE IMAGE (Moved to end, executed always)
-    std::string filename = "/root/ros_ws/src/roadmap.png";;
+    // 6. SAVE IMAGE 
+    std::string filename = "/home/ubuntu/trento_lab_home/roadmap_visualization.png";
     try {
         bool success = cv::imwrite(filename, canvas);
         if (success) {
-            ROS_INFO("[Roadmap] successfully saved to: %s", filename.c_str());
+            ROS_INFO("[Roadmap] Image successfully saved to: %s", filename.c_str());
         } else {
             ROS_ERROR("[Roadmap] Failed to save image to %s. Check permissions.", filename.c_str());
         }
     } catch (const cv::Exception& ex) {
         ROS_ERROR("[Roadmap] OpenCV Exception saving: %s", ex.what());
     }
-    */
 
     // 7. DISPLAY IMAGE
     // Using namedWindow ensures the window is created properly before showing
@@ -601,11 +599,12 @@ void Roadmap::paint_roadmap() {
         // 3. Show the image
         cv::imshow(win_name, canvas);
         
-        // 4. Increase wait time to 10ms or 30ms.
-        // Docker X11 forwarding has latency. 1ms is often too fast for the refresh to trigger.
-        cv::waitKey(30); 
+        // 4. Wait 5 seconds to keep window open
+        // Press any key to close earlier
+        ROS_INFO("[Roadmap] Visualization window open. Press any key to close...");
+        cv::waitKey(5000); 
         
     } catch (const cv::Exception& e) {
-        ROS_DEBUG("[Roadmap] OpenCV Window error: %s", e.what());
+        ROS_WARN("[Roadmap] OpenCV Window error (X11 may not be available): %s", e.what());
     }
 }

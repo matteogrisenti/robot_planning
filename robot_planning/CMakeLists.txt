@@ -129,8 +129,16 @@ include_directories(
 #   src/${PROJECT_NAME}/robot_planning.cpp
 # )
 add_library(dubins_library src/dubins_trajectory.cpp)
-add_library(data_structures src/data_structures.cpp)
 add_library(collision_checker_lib src/collision_checker.cpp)
+add_library(data_structures src/data_structures.cpp)
+
+# Link data_structures library dependencies
+target_link_libraries(data_structures
+  ${catkin_LIBRARIES}
+  ${OpenCV_LIBRARIES}
+  dubins_library
+  collision_checker_lib
+)
 
 add_executable(roadmap_node src/roadmap_node.cpp)
 
@@ -141,6 +149,7 @@ target_link_libraries(roadmap_node
   dubins_library
   data_structures
 )
+add_dependencies(roadmap_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
@@ -154,12 +163,14 @@ target_link_libraries(roadmap_node
 
 ## Data verifier node for testing
 add_executable(data_verifier_node src/data_verifier_node.cpp)
-target_link_libraries(data_verifier_node ${catkin_LIBRARIES} dubins_library)
+target_link_libraries(data_verifier_node 
+  ${catkin_LIBRARIES} 
+  ${OpenCV_LIBRARIES}
+  dubins_library
+  collision_checker_lib
+  data_structures
+)
 add_dependencies(data_verifier_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-
-add_executable(roadmap_node src/roadmap_node.cpp)
-target_link_libraries( roadmap_node ${catkin_LIBRARIES} ${OpenCV_LIBS} data_structures)
-add_dependencies(roadmap_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
