@@ -132,6 +132,7 @@ include_directories(
 add_library(dubins_library src/dubins_trajectory.cpp)
 add_library(data_structures src/roadmap/data_structures.cpp)
 add_library(visualization src/roadmap/visualization.cpp)
+add_library(roadmap src/roadmap/roadmap.cpp)
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
