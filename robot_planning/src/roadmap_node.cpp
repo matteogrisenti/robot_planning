@@ -8,6 +8,8 @@
 #include <obstacles_msgs/ObstacleArrayMsg.h>
 #include <geometry_msgs/Polygon.h>
 #include <geometry_msgs/PoseArray.h>
+#include <nav_msgs/Odometry.h>
+
 
 #include "roadmap/data_structures.h"
 
@@ -72,6 +74,32 @@ void processMapBorders(const geometry_msgs::Polygon::ConstPtr& msg, Roadmap& roa
     }
 
     ROS_INFO_STREAM("[MapBorders] roadmap mapBorders: " << roadmap.mapBorders.to_string());
+}
+
+
+/* ====================================== Odometry Processing ======================================== */
+// This function read the message containing the odometry data coming from the map package. 
+// Extract this data and store the inside the Start attributes of the give Roadmap element
+void processOdometry(const nav_msgs::Odometry::ConstPtr& msg, Roadmap& roadmap) {
+    ROS_INFO("[Odometry] Received robot position");
+    
+    // Extract position
+    Point position;
+    position.x = msg->pose.pose.position.x;
+    position.y = msg->pose.pose.position.y;
+    position.z = msg->pose.pose.position.z;
+    
+    // Extract orientation (quaternion)
+    Orientation orientation;
+    orientation.x = msg->pose.pose.orientation.x;
+    orientation.y = msg->pose.pose.orientation.y;
+    orientation.z = msg->pose.pose.orientation.z;
+    orientation.w = msg->pose.pose.orientation.w;
+    
+    // Store as start position
+    roadmap.start = Start(position, orientation);
+    
+    ROS_INFO_STREAM("[Odometry] Start position set: " << roadmap.start.to_string());
 }
 
 /* ====================================== Gates Processing ======================================== */
@@ -179,43 +207,42 @@ void roadmap_init(ros::NodeHandle& nh)
     // NB: Since in our scenario the enviroment is static we sample only one time the map structure, obstacles and victims
 
     // Get map borders (once)
-    auto map_borders_msg = ros::topic::waitForMessage<geometry_msgs::Polygon>(
-        "/map_borders", nh);
+    auto map_borders_msg = ros::topic::waitForMessage<geometry_msgs::Polygon>("/map_borders", nh);
     if (map_borders_msg) {
         processMapBorders(map_borders_msg, roadmap); 
     }
 
+    // Get the start point: the odometry of the robot
+    auto odom_msg = ros::topic::waitForMessage<nav_msgs::Odometry>("/odom", nh);
+    if (odom_msg) {
+        processOdometry(odom_msg, roadmap);
+    }
+
     // Get gates (once)
-    auto gates_msg = ros::topic::waitForMessage<geometry_msgs::PoseArray>(
-        "/gates", nh);
+    auto gates_msg = ros::topic::waitForMessage<geometry_msgs::PoseArray>("/gates", nh);
     if (map_borders_msg) {
         processGates(gates_msg, roadmap); 
     }
 
     // Get obstacles (once)
-    auto obstacles_msg = ros::topic::waitForMessage<obstacles_msgs::ObstacleArrayMsg>(
-        "/obstacles", nh);
+    auto obstacles_msg = ros::topic::waitForMessage<obstacles_msgs::ObstacleArrayMsg>("/obstacles", nh);
     if (obstacles_msg) {
         processObstacles(obstacles_msg, roadmap); 
     }
 
     // Get map victims (once)
-    auto victims_msg = ros::topic::waitForMessage<obstacles_msgs::ObstacleArrayMsg>(
-        "/victims", nh);
+    auto victims_msg = ros::topic::waitForMessage<obstacles_msgs::ObstacleArrayMsg>("/victims", nh);
     if (map_borders_msg) {
         processVictims(victims_msg, roadmap); 
     }
 
-    /* TODO Get Limo Start Point
-    auto start_msg = ros::topic::waitForMessage<obstacles_msgs::ObstacleArrayMsg>(
-        "/??????", nh);
-    if (map_borders_msg) {
-        processStart(victims_msg, roadmap); 
-    }*/
-
     // plot the roadmap
     roadmap.paint_roadmap();
 }
+
+
+
+
 
 int main(int argc, char **argv)
 {

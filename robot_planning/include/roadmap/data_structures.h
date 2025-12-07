@@ -45,6 +45,7 @@ private:
     Orientation orientation;
 
 public: 
+    Start(); 
     Start(const Point& position, const Orientation& orientation);
 
     const Point& get_position() const;
@@ -162,6 +163,7 @@ class Roadmap {
 public:
     MapBorders mapBorders;
     Gates gates;
+    Start start; 
     Obstacles obstacles;
     Victims victims;
 

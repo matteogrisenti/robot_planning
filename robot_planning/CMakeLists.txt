@@ -14,6 +14,7 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs   
   obstacles_msgs
   visualization_msgs
+  nav_msgs
 )
 
 ## System dependencies are found with CMake's conventions
@@ -108,7 +109,7 @@ find_package(OpenCV REQUIRED)
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES robot_planning
-  CATKIN_DEPENDS roscpp rospy std_msgs geometry_msgs obstacles_msgs
+  CATKIN_DEPENDS roscpp rospy std_msgs geometry_msgs obstacles_msgs nav_msgs
   DEPENDS OpenCV
 )
 
@@ -129,7 +130,8 @@ include_directories(
 #   src/${PROJECT_NAME}/robot_planning.cpp
 # )
 add_library(dubins_library src/dubins_trajectory.cpp)
-add_library(data_structures src/data_structures.cpp)
+add_library(data_structures src/roadmap/data_structures.cpp)
+add_library(visualization src/roadmap/visualization.cpp)
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
@@ -147,7 +149,7 @@ target_link_libraries(data_verifier_node ${catkin_LIBRARIES} dubins_library)
 add_dependencies(data_verifier_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 add_executable(roadmap_node src/roadmap_node.cpp)
-target_link_libraries( roadmap_node ${catkin_LIBRARIES} ${OpenCV_LIBS} data_structures)
+target_link_libraries( roadmap_node ${catkin_LIBRARIES} ${OpenCV_LIBS} data_structures visualization)
 add_dependencies(roadmap_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Rename C++ executable without prefix
