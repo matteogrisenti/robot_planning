@@ -219,15 +219,40 @@ void roadmap_init(ros::NodeHandle& nh)
 
 int main(int argc, char **argv)
 {
-    // Inizializza il nodo ROS
     ros::init(argc, argv, "roadmap_node");
     ros::NodeHandle nh;
 
-    // Inizializza roadmap e i suoi subscriber
-    roadmap_init(nh);
+    // Configura parametri robot
+    double robot_radius = 0.25;
+    double safety_margin = 0.05;
+    Roadmap roadmap(robot_radius, safety_margin);
 
-    // Loop principale per ricevere i messaggi
-    ros::spin();
+    // --- FASE 1: ACQUISIZIONE DATI (Bloccante) ---
+    // ... (Il tuo codice esistente con waitForMessage) ...
+    
+    auto map_borders_msg = ros::topic::waitForMessage<geometry_msgs::Polygon>("/map_borders", nh);
+    if (map_borders_msg) processMapBorders(map_borders_msg, roadmap);
 
+    auto obstacles_msg = ros::topic::waitForMessage<obstacles_msgs::ObstacleArrayMsg>("/obstacles", nh);
+    if (obstacles_msg) processObstacles(obstacles_msg, roadmap);
+    
+    // ... (altri wait for message: victims, gates) ...
+
+    // --- FASE 2: PREPARAZIONE ALGORITMICA (INTEGRAZIONE) ---
+    // Ora che abbiamo tutti i dati "human readable", creiamo la cache "machine readable"
+    roadmap.update_collision_cache();
+
+    // DA QUI IN POI PUOI USARE:
+    // roadmap.is_state_valid(x, y)
+    // roadmap.is_dubins_path_valid(...)
+    // Per i tuoi algoritmi RRT/PRM
+
+    ROS_INFO("Roadmap ready for planning.");
+
+    // plot the roadmap (Opencv viz)
+    roadmap.paint_roadmap();
+    
+    // Mantieni il nodo vivo se serve (o return 0 se finisce qui)
+    // ros::spin(); 
     return 0;
 }

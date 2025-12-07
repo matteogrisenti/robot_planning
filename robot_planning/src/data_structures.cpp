@@ -10,6 +10,118 @@
 
 #include "roadmap/data_structures.h"
 
+// --- Costruttore ---
+Roadmap::Roadmap(double robot_radius, double safety_margin) 
+    : collision_checker_(robot_radius, safety_margin) 
+{
+}
+
+// --- INTEGRAZIONE: Conversione Dati (Baking) ---
+void Roadmap::update_collision_cache() {
+    cached_circles_.clear();
+    cached_polygons_.clear();
+
+    ROS_INFO("[Roadmap] Baking collision data...");
+
+    // 1. Converti OSTACOLI DINAMICI
+    const auto& obs_vec = obstacles.get_obstacles();
+    for (const auto& obs : obs_vec) {
+        const auto& pts = obs.get_points();
+        float r = obs.get_radius();
+
+        // CILINDRI
+        if (r > 0 && pts.size() >= 1) {
+            cached_circles_.push_back({{pts[0].x, pts[0].y}, (double)r});
+        }
+        // BOX / POLIGONI
+        else if (pts.size() > 2) {
+            std::vector<Point2D> verts;
+            double sum_x = 0, sum_y = 0;
+            for (const auto& p : pts) {
+                verts.push_back({p.x, p.y});
+                sum_x += p.x; sum_y += p.y;
+            }
+            
+            // Calcolo Centroide e Bounding Radius per CollisionChecker
+            Point2D centroid = {sum_x / verts.size(), sum_y / verts.size()};
+            double max_dist_sq = 0;
+            for (const auto& v : verts) {
+                double d2 = std::pow(v.x - centroid.x, 2) + std::pow(v.y - centroid.y, 2);
+                if (d2 > max_dist_sq) max_dist_sq = d2;
+            }
+            cached_polygons_.push_back({verts, centroid, std::sqrt(max_dist_sq)});
+        }
+    }
+
+    // 2. Converti BORDI MAPPA (come Poligono Statico)
+    const auto& border_pts = mapBorders.get_points();
+    if (border_pts.size() > 2) {
+        std::vector<Point2D> verts;
+        double sum_x = 0, sum_y = 0;
+        for (const auto& p : border_pts) {
+            verts.push_back({p.x, p.y});
+            sum_x += p.x; sum_y += p.y;
+        }
+        Point2D centroid = {sum_x / verts.size(), sum_y / verts.size()};
+        double max_dist_sq = 0;
+        for (const auto& v : verts) {
+            double d2 = std::pow(v.x - centroid.x, 2) + std::pow(v.y - centroid.y, 2);
+            if (d2 > max_dist_sq) max_dist_sq = d2;
+        }
+        cached_polygons_.push_back({verts, centroid, std::sqrt(max_dist_sq)});
+    }
+    
+    ROS_INFO("[Roadmap] Cache Updated: %lu Circles, %lu Polygons (incl. Borders)", 
+             cached_circles_.size(), cached_polygons_.size());
+}
+
+// --- INTEGRAZIONE: Check Puntuale ---
+bool Roadmap::is_state_valid(double x, double y) const {
+    // Ritorna TRUE se il punto è LIBERO (CollisionChecker.check ritorna true se COLLIDE)
+    return !collision_checker_.check({x, y}, cached_circles_, cached_polygons_);
+}
+
+// --- INTEGRAZIONE: Check Dubins Path ---
+bool Roadmap::is_dubins_path_valid(const Point& start, double start_theta, 
+                                   const Point& end, double end_theta, 
+                                   double rho) const {
+    
+    // Configura parametri Dubins
+    double k_max = 1.0 / rho;
+    int best_word = -1;
+    dubinscurve_out curve;
+
+    // 1. Calcola la curva
+    dubins_shortest_path(start.x, start.y, start_theta, 
+                         end.x, end.y, end_theta, 
+                         k_max, best_word, &curve);
+
+    if (best_word < 0) return false; // Percorso impossibile
+
+    // 2. Campiona e valida ogni punto lungo la curva
+    double step_size = 0.1; // Check ogni 10cm
+    
+    auto check_arc = [&](const dubinsarc_out& arc) -> bool {
+        int steps = std::ceil(arc.l / step_size);
+        for (int i = 0; i <= steps; ++i) {
+            double s = (i * step_size > arc.l) ? arc.l : i * step_size;
+            long double x, y, th;
+            circline(s, arc.x0, arc.y0, arc.th0, arc.k, x, y, th);
+
+            // Se anche un solo punto collide, il percorso è invalido
+            if (!is_state_valid((double)x, (double)y)) {
+                return false; 
+            }
+        }
+        return true;
+    };
+
+    if (!check_arc(curve.a1)) return false;
+    if (!check_arc(curve.a2)) return false;
+    if (!check_arc(curve.a3)) return false;
+
+    return true; // Percorso pulito
+}
 
 // ============== MapBorders ==============
 MapBorders::MapBorders() = default;

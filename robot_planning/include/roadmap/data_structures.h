@@ -3,6 +3,9 @@
 #include <iostream> // for std::cout
 #include <iomanip>  // for std::setprecision
 
+#include "dubins_planner/collision_checker.h"
+#include "dubins_planner/dubins_trajectory.h"
+
 
 struct Point {
     double x;
@@ -165,7 +168,39 @@ public:
     Obstacles obstacles;
     Victims victims;
 
-    Roadmap();
+    // Costruttore: Inizializza il checker
+    Roadmap(double robot_radius = 0.25, double safety_margin = 0.05);
 
+    // Metodo esistente
     void paint_roadmap();
+
+    /**
+     * @brief Converte ostacoli e bordi nel formato ottimizzato per il CollisionChecker.
+     * Da chiamare UNA VOLTA dopo aver ricevuto tutti i messaggi ROS.
+     */
+    void update_collision_cache();
+
+    /**
+     * @brief Controlla se una singola configurazione (x,y) è valida (libera).
+     */
+    bool is_state_valid(double x, double y) const;
+
+    /**
+     * @brief Controlla se è possibile connettere A a B con una curva di Dubins valida.
+     * @param start Configurazione di partenza {x, y, theta}
+     * @param end Configurazione di arrivo {x, y, theta}
+     * @param rho Raggio minimo di curvatura (es. 0.5m)
+     * @return true se il percorso esiste ed è libero da collisioni.
+     */
+    bool is_dubins_path_valid(const Point& start, double start_theta, 
+                              const Point& end, double end_theta, 
+                              double rho) const;
+
+private:
+    // Motore di collisione
+    CollisionChecker collision_checker_;
+
+    // Cache ottimizzata (Poligoni e Cerchi pronti per il check)
+    std::vector<CircleObstacle> cached_circles_;
+    std::vector<PolygonObstacle> cached_polygons_;
 };

@@ -130,6 +130,17 @@ include_directories(
 # )
 add_library(dubins_library src/dubins_trajectory.cpp)
 add_library(data_structures src/data_structures.cpp)
+add_library(collision_checker_lib src/collision_checker.cpp)
+
+add_executable(roadmap_node src/roadmap_node.cpp)
+
+target_link_libraries(roadmap_node
+  ${catkin_LIBRARIES} 
+  ${OpenCV_LIBRARIES} 
+  collision_checker_lib 
+  dubins_library
+  data_structures
+)
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
