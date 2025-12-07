@@ -1,12 +1,12 @@
-#ifndef ROADMAP_VISUALIZATION_H
-#define ROADMAP_VISUALIZATION_H
+#ifndef MAP_VISUALIZATION_H
+#define MAP_VISUALIZATION_H
 
 #include <opencv2/opencv.hpp>
 #include <ros/ros.h>
 
 #include "roadmap/data_structures.h"
 
-namespace roadmap_viz {
+namespace map_viz {
 
     // Configuration structure
     struct VizConfig {
@@ -33,7 +33,7 @@ namespace roadmap_viz {
         int start_arrow_length = 25;
         
         // Window name
-        std::string window_name = "Roadmap Visualization";
+        std::string window_name = "Map Visualization";
     };
 
     // Bounds calculator
@@ -47,19 +47,19 @@ namespace roadmap_viz {
     };
 
     // Main visualization class
-    class RoadmapVisualizer {
+    class MapVisualizer {
     private:
         VizConfig config_;
         cv::Mat canvas_;
         WorldBounds bounds_;
         
         // Helper functions
-        void calculateBounds(const Roadmap& roadmap);
+        void calculateBounds(const Map& map);
         cv::Point worldToImage(float x, float y) const;
         float quaternionToYaw(const Orientation& q) const;
         
         // Drawing functions
-        void drawBorders(const MapBorders& borders);
+        void drawBorders(const Borders& borders);
         void drawObstacles(const Obstacles& obstacles);
         void drawVictims(const Victims& victims);
         void drawGates(const Gates& gates);
@@ -68,10 +68,10 @@ namespace roadmap_viz {
         void drawGrid();
         
     public:
-        RoadmapVisualizer(const VizConfig& config = VizConfig());
+        MapVisualizer(const VizConfig& config = VizConfig());
         
         // Main render function
-        void render(const Roadmap& roadmap);
+        void render(const Map& map);
         
         // Display/Save functions
         void display();

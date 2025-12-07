@@ -14,24 +14,24 @@
 #include "roadmap/data_structures.h"
 
 
-// ============== MapBorders ==============
-MapBorders::MapBorders() = default;
+// ============== Borders ==============
+Borders::Borders() = default;
 
-const std::vector<Point>& MapBorders::get_points() const {
+const std::vector<Point>& Borders::get_points() const {
     return points;
 }
 
-void MapBorders::add_point(double x, double y, double z) {
+void Borders::add_point(double x, double y, double z) {
     points.push_back({x, y, z});
 }
 
-void MapBorders::clear() {
+void Borders::clear() {
     points.clear();
 }
 
-std::string MapBorders::to_string() const {
+std::string Borders::to_string() const {
     std::ostringstream oss;
-    oss << "MapBorders: " << points.size() << " vertices\n";
+    oss << "Borders: " << points.size() << " vertices\n";
     for (size_t i = 0; i < points.size(); ++i) {
         const auto& p = points[i];
         oss << "  Point " << i 
@@ -293,12 +293,12 @@ std::string Victims::to_string() const {
 
 
 
-// ============== Roadmap ==============
-Roadmap::Roadmap() = default;
+// ============== Map ==============
+Map::Map() = default;
 
-void Roadmap::paint_roadmap() {
+void Map::paint_map() {
     // Create visualizer with default config
-    roadmap_viz::RoadmapVisualizer visualizer;
+    map_viz::MapVisualizer visualizer;
     
     // Render the roadmap
     visualizer.render(*this);

@@ -21,12 +21,12 @@ struct Orientation {
 
 // -------------- MapBorders -----------------
 // Bring all the vertices of the Map
-class MapBorders {
+class Borders {
 private:
     std::vector<Point> points;  // Vertex of the Poligonal Shape
 
 public:
-    MapBorders();
+    Borders();
 
     const std::vector<Point>& get_points() const;
 
@@ -158,16 +158,16 @@ public:
 };
 
 
-// --------------- Complete roadmap ----------------
-class Roadmap {
+// --------------- Complete Map ----------------
+class Map {
 public:
-    MapBorders mapBorders;
+    Borders borders;
     Gates gates;
     Start start; 
     Obstacles obstacles;
     Victims victims;
 
-    Roadmap();
+    Map();
 
-    void paint_roadmap();
+    void paint_map();
 };

@@ -5,17 +5,17 @@ better organization */
 #include <cmath>
 #include <limits>
 
-namespace roadmap_viz {
+namespace map_viz {
 
-// ============== RoadmapVisualizer Implementation ==============
+// ============== MapVisualizer Implementation ==============
 
-RoadmapVisualizer::RoadmapVisualizer(const VizConfig& config) 
+MapVisualizer::MapVisualizer(const VizConfig& config) 
     : config_(config) 
 {
     canvas_ = cv::Mat(config_.img_height, config_.img_width, CV_8UC3, config_.color_background);
 }
 
-void RoadmapVisualizer::calculateBounds(const Roadmap& roadmap) {
+void MapVisualizer::calculateBounds(const Map& map) {
     bounds_.min_x = std::numeric_limits<float>::max();
     bounds_.max_x = std::numeric_limits<float>::lowest();
     bounds_.min_y = std::numeric_limits<float>::max();
@@ -31,29 +31,29 @@ void RoadmapVisualizer::calculateBounds(const Roadmap& roadmap) {
     };
     
     // Gather bounds from all sources
-    for (const auto& p : roadmap.mapBorders.get_points()) {
+    for (const auto& p : map.borders.get_points()) {
         update_bounds(static_cast<float>(p.x), static_cast<float>(p.y));
     }
     
-    for (const auto& obs : roadmap.obstacles.get_obstacles()) {
+    for (const auto& obs : map.obstacles.get_obstacles()) {
         for (const auto& p : obs.get_points()) {
             update_bounds(static_cast<float>(p.x), static_cast<float>(p.y));
         }
     }
     
-    for (const auto& v : roadmap.victims.get_victims()) {
+    for (const auto& v : map.victims.get_victims()) {
         update_bounds(static_cast<float>(v.get_center().x), 
                      static_cast<float>(v.get_center().y));
     }
     
-    for (const auto& g : roadmap.gates.get_gates()) {
+    for (const auto& g : map.gates.get_gates()) {
         update_bounds(static_cast<float>(g.get_position().x), 
                      static_cast<float>(g.get_position().y));
     }
     
-    if (roadmap.start.get_position().x != 0 || roadmap.start.get_position().y != 0) {
-        update_bounds(static_cast<float>(roadmap.start.get_position().x),
-                    static_cast<float>(roadmap.start.get_position().y));
+    if (map.start.get_position().x != 0 || map.start.get_position().y != 0) {
+        update_bounds(static_cast<float>(map.start.get_position().x),
+                    static_cast<float>(map.start.get_position().y));
     }
     
     // Handle empty map
@@ -79,19 +79,19 @@ void RoadmapVisualizer::calculateBounds(const Roadmap& roadmap) {
              bounds_.min_x, bounds_.max_x, bounds_.min_y, bounds_.max_y, bounds_.scale);
 }
 
-cv::Point RoadmapVisualizer::worldToImage(float x, float y) const {
+cv::Point MapVisualizer::worldToImage(float x, float y) const {
     int img_x = static_cast<int>((x - bounds_.min_x) * bounds_.scale + config_.margin);
     int img_y = static_cast<int>(config_.img_height - 
                                  ((y - bounds_.min_y) * bounds_.scale + config_.margin));
     return cv::Point(img_x, img_y);
 }
 
-float RoadmapVisualizer::quaternionToYaw(const Orientation& q) const {
+float MapVisualizer::quaternionToYaw(const Orientation& q) const {
     return std::atan2(2.0f * (q.w * q.z + q.x * q.y),
                      1.0f - 2.0f * (q.y * q.y + q.z * q.z));
 }
 
-void RoadmapVisualizer::drawBorders(const MapBorders& borders) {
+void MapVisualizer::drawBorders(const Borders& borders) {
     const auto& points = borders.get_points();
     if (points.size() < 2) return;
     
@@ -107,7 +107,7 @@ void RoadmapVisualizer::drawBorders(const MapBorders& borders) {
                   config_.color_border, config_.border_thickness);
 }
 
-void RoadmapVisualizer::drawObstacles(const Obstacles& obstacles) {
+void MapVisualizer::drawObstacles(const Obstacles& obstacles) {
     for (const auto& obstacle : obstacles.get_obstacles()) {
         const auto& vertices = obstacle.get_points();
         if (vertices.empty()) continue;
@@ -142,7 +142,7 @@ void RoadmapVisualizer::drawObstacles(const Obstacles& obstacles) {
     }
 }
 
-void RoadmapVisualizer::drawVictims(const Victims& victims) {
+void MapVisualizer::drawVictims(const Victims& victims) {
     for (const auto& victim : victims.get_victims()) {
         cv::Point center_px = worldToImage(
             static_cast<float>(victim.get_center().x),
@@ -161,7 +161,7 @@ void RoadmapVisualizer::drawVictims(const Victims& victims) {
     }
 }
 
-void RoadmapVisualizer::drawGates(const Gates& gates) {
+void MapVisualizer::drawGates(const Gates& gates) {
     for (const auto& gate : gates.get_gates()) {
         cv::Point gate_pos = worldToImage(
             static_cast<float>(gate.get_position().x),
@@ -179,7 +179,7 @@ void RoadmapVisualizer::drawGates(const Gates& gates) {
     }
 }
 
-void RoadmapVisualizer::drawStart(const Start& start) {
+void MapVisualizer::drawStart(const Start& start) {
     const Point& position = start.get_position();
     const Orientation& orientation = start.get_orientation();
     
@@ -210,14 +210,14 @@ void RoadmapVisualizer::drawStart(const Start& start) {
                 cv::FONT_HERSHEY_SIMPLEX, 0.6, config_.color_start_fill, 2);
 }
 
-void RoadmapVisualizer::drawLegend() {
+void MapVisualizer::drawLegend() {
     int x = 20, y = 30;
     cv::putText(canvas_, 
                 "Borders (Black) | Obstacles (Red) | Victims (Purple) | Gates (Green) | Start (Blue)", 
                 cv::Point(x, y), cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(50, 50, 50), 2);
 }
 
-void RoadmapVisualizer::drawGrid() {
+void MapVisualizer::drawGrid() {
     if (!bounds_.points_found) return;
     cv::rectangle(canvas_, 
                   worldToImage(bounds_.min_x, bounds_.min_y), 
@@ -225,14 +225,14 @@ void RoadmapVisualizer::drawGrid() {
                   cv::Scalar(200, 200, 200), 1);
 }
 
-void RoadmapVisualizer::render(const Roadmap& roadmap) {
+void MapVisualizer::render(const Map& map) {
     ROS_INFO("[Visualizer] Starting render...");
     
     // Reset canvas
     canvas_ = cv::Mat(config_.img_height, config_.img_width, CV_8UC3, config_.color_background);
     
     // Calculate bounds and scale
-    calculateBounds(roadmap);
+    calculateBounds(map);
     
     if (!bounds_.points_found) {
         cv::putText(canvas_, "NO DATA AVAILABLE", 
@@ -243,17 +243,17 @@ void RoadmapVisualizer::render(const Roadmap& roadmap) {
     
     // Draw all elements in order (back to front)
     // drawGrid();  // Optional
-    drawBorders(roadmap.mapBorders);
-    drawObstacles(roadmap.obstacles);
-    drawVictims(roadmap.victims);
-    drawGates(roadmap.gates);
-    drawStart(roadmap.start);
+    drawBorders(map.borders);
+    drawObstacles(map.obstacles);
+    drawVictims(map.victims);
+    drawGates(map.gates);
+    drawStart(map.start);
     drawLegend();
     
     ROS_INFO("[Visualizer] Render complete!");
 }
 
-void RoadmapVisualizer::display() {
+void MapVisualizer::display() {
     try {
         cv::namedWindow(config_.window_name, cv::WINDOW_NORMAL);
         cv::resizeWindow(config_.window_name, 800, 600);
@@ -264,7 +264,7 @@ void RoadmapVisualizer::display() {
     }
 }
 
-bool RoadmapVisualizer::saveToFile(const std::string& filename) {
+bool MapVisualizer::saveToFile(const std::string& filename) {
     try {
         bool success = cv::imwrite(filename, canvas_);
         if (success) {
