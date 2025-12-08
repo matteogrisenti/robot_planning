@@ -133,6 +133,7 @@ add_library(dubins_library src/dubins_trajectory.cpp)
 # Library to menage the Map
 add_library(map_data_structures src/map/map_data_structures.cpp)
 add_library(map_visualization src/map/map_visualization.cpp)
+add_library(map_builder src/map/map_builder.cpp)
 # Library to menage the Roadmap
 add_library(roadmap_data_structures src/roadmap/roadmap_data_structures.cpp)
 add_library(roadmap_visualization src/roadmap/roadmap_visualization.cpp)
@@ -142,6 +143,7 @@ add_library(exact_cell_decomposition src/combinatorial_planning/exact_cell_decom
 add_library(approximate_cell_decomposition src/combinatorial_planning/approximate_cell_decomposition.cpp)
 add_library(maximum_clearance_roadmap src/combinatorial_planning/maximum_clearance_roadmap.cpp)
 
+
 target_link_libraries(map_data_structures 
     ${OpenCV_LIBS}               # ADD THIS - data_structures uses OpenCV
     map_visualization            # ADD THIS - data_structures uses MapVisualizer
@@ -150,6 +152,11 @@ target_link_libraries(map_data_structures
 
 target_link_libraries(map_visualization
     ${OpenCV_LIBS}           # ADD THIS if visualization uses OpenCV
+    ${catkin_LIBRARIES}
+)
+
+target_link_libraries(map_builder 
+    map_data_structures            # ADD THIS - data_structures uses MapVisualizer
     ${catkin_LIBRARIES}
 )
 
@@ -190,14 +197,17 @@ add_executable(data_verifier_node src/data_verifier_node.cpp)
 target_link_libraries(data_verifier_node ${catkin_LIBRARIES} dubins_library)
 add_dependencies(data_verifier_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
-add_executable(roadmap_node src/roadmap_node.cpp)
-target_link_libraries( roadmap_node ${catkin_LIBRARIES} ${OpenCV_LIBS} 
-  map_data_structures 
+# Test node
+add_executable(roadmap_test_node src/test/roadmap_test_node.cpp )
+target_link_libraries(roadmap_test_node
+  map_builder
   roadmap_visualization 
   exact_cell_decomposition
   approximate_cell_decomposition
-  maximum_clearance_roadmap )
-add_dependencies(roadmap_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+  maximum_clearance_roadmap
+  ${catkin_LIBRARIES}
+)
+add_dependencies(roadmap_test_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
