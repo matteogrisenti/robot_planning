@@ -61,13 +61,43 @@ namespace ExactDecomposition {
             trapIdToNodeId[i] = roadmap->addVertex(trapezoids[i].center);
         }
 
-        // Add edges based on neighbors
+        // Iterate over all trapezoids to connect them
         for (size_t i = 0; i < trapezoids.size(); ++i) {
+            const auto& t1 = trapezoids[i];
+
             for (int neighborIdx : trapezoids[i].neighbors) {
                 // Avoid adding double edges (undirected graph)
-                if (neighborIdx > (int)i) {
-                    roadmap->addEdge(trapIdToNodeId[i], trapIdToNodeId[neighborIdx], true);
-                }
+                if (neighborIdx <= (int)i) continue;
+
+                const auto& t2 = trapezoids[neighborIdx];
+                
+                // 1. Identify Shared Boundary X
+                bool t1IsLeft = std::abs(t1.rightX - t2.leftX) < 1e-6;
+                double sharedX = t1IsLeft ? t1.rightX : t1.leftX;
+
+                // 2. Identify Shared Boundary Y-Interval
+                // Get t1's Y range at the shared X
+                double t1_y_high = t1IsLeft ? t1.topRightY : t1.topLeftY;
+                double t1_y_low  = t1IsLeft ? t1.bottomRightY : t1.bottomLeftY;
+
+                // Get t2's Y range at the shared X
+                double t2_y_high = t1IsLeft ? t2.topLeftY : t2.topRightY;
+                double t2_y_low  = t1IsLeft ? t2.bottomLeftY : t2.bottomRightY;
+
+                // Calculate the geometric overlap
+                double overlapStart = std::max(t1_y_low, t2_y_low);
+                double overlapEnd   = std::min(t1_y_high, t2_y_high);
+
+                // 3. Create Gateway Vertex
+                // We place a vertex exactly in the middle of the "door" between trapezoids
+                double midY = (overlapStart + overlapEnd) / 2.0;
+                Vertex gateway(sharedX, midY);
+
+                int gatewayNodeId = roadmap->addVertex(gateway);
+
+                // 4. Connect: Center1 -> Gateway -> Center2
+                roadmap->addEdge(trapIdToNodeId[i], gatewayNodeId, true);
+                roadmap->addEdge(gatewayNodeId, trapIdToNodeId[neighborIdx], true);
             }
         }
 

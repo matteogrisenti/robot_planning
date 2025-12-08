@@ -4,37 +4,74 @@
 #include <algorithm>
 #include <iostream>
 #include <limits>
-#include "combinatorial_planning/planning_utils.h" // For pointInObstacle/Border checks
+#include "combinatorial_planning/planning_utils.h"
 
 namespace MaxClearanceRoadmap {
 
-    // ==========================================
-    // Internal Helper Structures
-    // ==========================================
-    
-    struct GridNode {
-        int x, y;
-    };
+    struct GridNode { int x, y; };
 
     struct PixelInfo {
-        double dist;       // Distance to nearest obstacle
-        int sourceObsId;   // ID of the obstacle that is nearest (-1 if none/init)
-        bool isVoronoi;    // Is this pixel on the ridge?
-        int roadmapNodeIdx; // Map to the final Roadmap vertex index
+        double dist;       
+        int sourceObsId;   
+        bool isVoronoi;    
+        int roadmapNodeIdx;
     };
 
-    // ==========================================
-    // Internal Helper Functions
-    // ==========================================
-
-    // Helper to check if a grid cell is valid
     bool isValid(int x, int y, int width, int height) {
         return x >= 0 && x < width && y >= 0 && y < height;
     }
 
-    // ==========================================
-    // Main Implementation
-    // ==========================================
+    // --- NEW: Thinning Algorithm (Zhang-Suen) ---
+    // This erodes the "thick" Voronoi bands into single-pixel lines
+    void applyThinning(std::vector<std::vector<PixelInfo>>& grid, int width, int height) {
+        // Neighbors: P2, P3, P4, P5, P6, P7, P8, P9
+        // Coordinates: (0,-1), (1,-1), (1,0), (1,1), (0,1), (-1,1), (-1,0), (-1,-1)
+        int dx[] = {0, 1, 1, 1, 0, -1, -1, -1};
+        int dy[] = {-1, -1, 0, 1, 1, 1, 0, -1};
+
+        bool pixelRemoved = true;
+        while (pixelRemoved) {
+            pixelRemoved = false;
+            std::vector<GridNode> toRemove;
+
+            // Two sub-iterations required by Zhang-Suen
+            for (int iter = 0; iter < 2; ++iter) {
+                toRemove.clear();
+                for (int x = 1; x < width - 1; ++x) {
+                    for (int y = 1; y < height - 1; ++y) {
+                        if (!grid[x][y].isVoronoi) continue;
+
+                        int p2 = grid[x + dx[0]][y + dy[0]].isVoronoi;
+                        int p3 = grid[x + dx[1]][y + dy[1]].isVoronoi;
+                        int p4 = grid[x + dx[2]][y + dy[2]].isVoronoi;
+                        int p5 = grid[x + dx[3]][y + dy[3]].isVoronoi;
+                        int p6 = grid[x + dx[4]][y + dy[4]].isVoronoi;
+                        int p7 = grid[x + dx[5]][y + dy[5]].isVoronoi;
+                        int p8 = grid[x + dx[6]][y + dy[6]].isVoronoi;
+                        int p9 = grid[x + dx[7]][y + dy[7]].isVoronoi;
+
+                        int A = (p2 == 0 && p3 == 1) + (p3 == 0 && p4 == 1) + 
+                                (p4 == 0 && p5 == 1) + (p5 == 0 && p6 == 1) + 
+                                (p6 == 0 && p7 == 1) + (p7 == 0 && p8 == 1) +
+                                (p8 == 0 && p9 == 1) + (p9 == 0 && p2 == 1);
+                        int B = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9;
+
+                        int m1 = (iter == 0) ? (p2 * p4 * p6) : (p2 * p4 * p8);
+                        int m2 = (iter == 0) ? (p4 * p6 * p8) : (p2 * p6 * p8);
+
+                        if (A == 1 && (B >= 2 && B <= 6) && m1 == 0 && m2 == 0) {
+                            toRemove.push_back({x, y});
+                        }
+                    }
+                }
+                
+                for (const auto& p : toRemove) {
+                    grid[p.x][p.y].isVoronoi = false;
+                    pixelRemoved = true;
+                }
+            }
+        }
+    }
 
     std::shared_ptr<Roadmap> maximumClearanceRoadmap(const Map& map, double gridResolution) {
         auto roadmap = std::make_shared<Roadmap>();
@@ -43,9 +80,7 @@ namespace MaxClearanceRoadmap {
         // 1. Determine Grid Dimensions
         double minX, minY, maxX, maxY;
         map.get_bounding_box(minX, minY, maxX, maxY);
-        
-        // Add padding
-        minX -= 1.0; minY -= 1.0; maxX += 1.0; maxY += 1.0;
+        minX -= 1.0; minY -= 1.0; maxX += 1.0; maxY += 1.0; // Padding
 
         int width = std::ceil((maxX - minX) / gridResolution);
         int height = std::ceil((maxY - minY) / gridResolution);
@@ -53,47 +88,28 @@ namespace MaxClearanceRoadmap {
         if (width <= 0 || height <= 0) return roadmap;
 
         // 2. Initialize Grid
-        // grid[x][y] stores distance and source obstacle ID
         std::vector<std::vector<PixelInfo>> grid(width, std::vector<PixelInfo>(height, {std::numeric_limits<double>::max(), -1, false, -1}));
         std::queue<GridNode> q;
 
-        // 3. Rasterize Obstacles & Borders (Sources)
-        // We treat Borders as Obstacle ID 0
-        // We treat Obstacles as IDs 1, 2, 3...
-        
-        // Rasterize Borders (approximate as boundary)
-        // A better approach for GVD inside a polygon is to treat the polygon boundary as the obstacle.
-        // We iterate over the grid and check "pointInPolygon" vs "pointInObstacle".
-        
-        int obsCount = 0;
-
-        // Brute-force initialization (safe & robust for complex shapes)
-        // For every pixel, check if it's inside an obstacle or close to border
+        // 3. Rasterize Obstacles (Same logic as before)
         for (int x = 0; x < width; ++x) {
             for (int y = 0; y < height; ++y) {
                 Vertex worldPos(minX + x * gridResolution, minY + y * gridResolution);
-                
-                // Check if inside any obstacle
                 bool insideObstacle = false;
                 int foundObsId = -1;
 
-                // Check actual obstacles
                 const auto& obstacles = map.obstacles.get_obstacles();
                 for (size_t i = 0; i < obstacles.size(); ++i) {
                     if (PlanningUtils::pointInObstacle(worldPos, obstacles[i])) {
-                        insideObstacle = true;
-                        foundObsId = i + 1; // ID 1..N
-                        break;
+                        insideObstacle = true; foundObsId = i + 1; break;
                     }
                 }
-
-                // Check Map Borders (if point is OUTSIDE borders, treat as obstacle)
+                
+                // Check borders
                 std::vector<Vertex> borderPoly;
                 for(const auto& p : map.borders.get_points()) borderPoly.push_back(Vertex(p.x, p.y));
-                
                 if (!insideObstacle && !PlanningUtils::pointInPolygon(worldPos, borderPoly)) {
-                    insideObstacle = true;
-                    foundObsId = 0; // ID 0 is Border
+                    insideObstacle = true; foundObsId = 0;
                 }
 
                 if (insideObstacle) {
@@ -104,16 +120,12 @@ namespace MaxClearanceRoadmap {
             }
         }
 
-        // 4. Brushfire Algorithm (BFS) to compute Distance Field & Voronoi Regions
-        // 8-connected neighbors
+        // 4. Brushfire (Same logic as before)
         int dx[] = {1, 1, 0, -1, -1, -1, 0, 1};
         int dy[] = {0, 1, 1, 1, 0, -1, -1, -1};
-        double distStep[] = {1.414, 1.0}; // Diagonals cost more
-
+        
         while (!q.empty()) {
-            GridNode current = q.front();
-            q.pop();
-
+            GridNode current = q.front(); q.pop();
             PixelInfo& currentInfo = grid[current.x][current.y];
 
             for (int i = 0; i < 8; ++i) {
@@ -121,33 +133,29 @@ namespace MaxClearanceRoadmap {
                 int ny = current.y + dy[i];
 
                 if (!isValid(nx, ny, width, height)) continue;
-
                 PixelInfo& neighborInfo = grid[nx][ny];
-                double stepCost = (std::abs(dx[i]) + std::abs(dy[i]) == 2) ? 1.414 : 1.0;
-                double newDist = currentInfo.dist + stepCost;
 
-                // If neighbor is unvisited, claim it
+                double stepCost = (std::abs(dx[i]) + std::abs(dy[i]) == 2) ? 1.414 : 1.0;
+                
                 if (neighborInfo.sourceObsId == -1) {
-                    neighborInfo.dist = newDist;
+                    neighborInfo.dist = currentInfo.dist + stepCost;
                     neighborInfo.sourceObsId = currentInfo.sourceObsId;
                     q.push({nx, ny});
                 } 
-                // If neighbor is visited by a DIFFERENT obstacle, we found a boundary!
                 else if (neighborInfo.sourceObsId != currentInfo.sourceObsId) {
-                    // This is a Voronoi Edge (Ridge)
-                    // Mark both as Voronoi to ensure connectivity
+                    // Mark candidate ridge pixels
                     currentInfo.isVoronoi = true;
                     neighborInfo.isVoronoi = true; 
                 }
             }
         }
 
-        // 5. Extract Nodes and Build Connectivity
-        // Convert 'isVoronoi' pixels to Roadmap Nodes
-        
-        // We only add nodes if they are sufficiently far from obstacles (clearance threshold)
-        // to avoid noisy edges right next to obstacles.
-        double minClearance = 1.0 / gridResolution; // e.g. 1 meter
+        // --- Apply Thinning ---
+        applyThinning(grid, width, height);
+
+
+        // 5. Extract Nodes (With Sparsity Check)
+        double minClearance = 1.0 / gridResolution; 
 
         for (int x = 0; x < width; ++x) {
             for (int y = 0; y < height; ++y) {
@@ -159,25 +167,20 @@ namespace MaxClearanceRoadmap {
         }
 
         // 6. Connect Neighbors
-        // For every Voronoi pixel, connect to adjacent Voronoi pixels
-        // This creates a grid-like graph along the ridges
         for (int x = 0; x < width; ++x) {
             for (int y = 0; y < height; ++y) {
                 int uIdx = grid[x][y].roadmapNodeIdx;
                 if (uIdx == -1) continue;
 
-                // Check right and bottom neighbors (to avoid duplicate edges)
-                // We check 4 neighbors (Right, Bot-Right, Bot, Bot-Left) to cover 8-connectivity
-                int cx[] = {1, 1, 0, -1};
-                int cy[] = {0, 1, 1, 1};
-
-                for (int i = 0; i < 4; ++i) {
-                    int nx = x + cx[i];
-                    int ny = y + cy[i];
+                // Check 8 neighbors now, as thinning might leave diagonal connections
+                for (int i = 0; i < 8; ++i) {
+                    int nx = x + dx[i];
+                    int ny = y + dy[i];
 
                     if (isValid(nx, ny, width, height)) {
                         int vIdx = grid[nx][ny].roadmapNodeIdx;
-                        if (vIdx != -1) {
+                        // Avoid self-loops and double edges (check index order)
+                        if (vIdx != -1 && uIdx < vIdx) {
                             roadmap->addEdge(uIdx, vIdx, true);
                         }
                     }
@@ -187,5 +190,4 @@ namespace MaxClearanceRoadmap {
 
         return roadmap;
     }
-
 }
