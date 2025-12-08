@@ -1,9 +1,15 @@
+#ifndef ROADMAP_H
+#define ROADMAP_H
+
 #include <vector>
 #include <unordered_map>
 #include <cmath>
 #include <random>
 #include <algorithm>
 #include <limits>
+#include <memory>
+
+#include "roadmap/data_structures.h"
 
 // Simple 2D point structure
 struct Vertex {
@@ -21,6 +27,45 @@ struct Edge {
     Edge(int target, double w);
 };
 
+// Helper structures and methods
+struct Cell {
+    double minX, minY, maxX, maxY;
+    bool isFree;
+    Vertex center;
+    
+    Cell(double x1, double y1, double x2, double y2) 
+        : minX(x1), minY(y1), maxX(x2), maxY(y2), isFree(true) {
+        center = Vertex((x1 + x2) / 2, (y1 + y2) / 2);
+    }
+    
+    bool contains(const Vertex& v) const {
+        return v.x >= minX && v.x <= maxX && v.y >= minY && v.y <= maxY;
+    }
+};
+
+struct Trapezoid {
+    // The vertical walls (x-coordinates)
+    double leftX, rightX;
+
+    // The slanted ceiling and floor (y-coordinates)
+    double topLeftY, topRightY;       
+    double bottomLeftY, bottomRightY; 
+
+    Vertex center;
+    std::vector<int> neighbors;
+
+    // Constructor calculates the true geometric center
+    Trapezoid(double lx, double rx, double tly, double try_, double bly, double bry)
+        : leftX(lx), rightX(rx), 
+          topLeftY(tly), topRightY(try_), 
+          bottomLeftY(bly), bottomRightY(bry) 
+    {
+        // Average of the 4 corners for the center node
+        center = Vertex((lx + rx) / 2.0, (tly + try_ + bly + bry) / 4.0);
+    }
+};
+
+
 class Roadmap {
 private:
     std::vector<Vertex> vertices;
@@ -33,6 +78,9 @@ private:
     std::vector<int> findKNearestNeighbors(int vertexIdx, int k) const;
 
 public:
+    std::shared_ptr<std::vector<Trapezoid>> debugTrapezoids;
+    std::shared_ptr<std::vector<Cell>> debugCells;
+
     Roadmap();
     
     // Add a vertex and return its index
@@ -50,3 +98,5 @@ public:
     // Get edges from a vertex
     const std::vector<Edge>& getEdges(int vertexIdx) const;
 };
+
+#endif // ROADMAP_H

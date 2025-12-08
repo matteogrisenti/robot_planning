@@ -1,4 +1,6 @@
-#pragma once
+#ifndef DATA_STRUCTURES_H
+#define DATA_STRUCTURES_H
+
 #include <vector>
 #include <iostream> // for std::cout
 #include <iomanip>  // for std::setprecision
@@ -16,7 +18,6 @@ struct Orientation {
     double z;
     double w;
 };
-
 
 
 // -------------- MapBorders -----------------
@@ -103,6 +104,9 @@ public:
     const std::vector<Point>& get_points() const;
     const float get_radius() const; 
 
+    // Get axis-aligned bounding box
+    void get_bounding_box(double& minX, double& minY, double& maxX, double& maxY) const; 
+
     std::string to_string() const;
 };
 
@@ -170,4 +174,11 @@ public:
     Map();
 
     void paint_map();
+
+    // Get map bounding box
+    void get_bounding_box(double& minX, double& minY, double& maxX, double& maxY) const; 
 };
+
+
+
+#endif // DATA STRUCTURES

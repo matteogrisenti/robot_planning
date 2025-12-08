@@ -144,13 +144,21 @@ Obstacle::Obstacle(const std::vector<Point>* points_ptr, const float radius)
     // If points_ptr is null, points remains empty (default constructed)
 }
 
-const std::vector<Point>& Obstacle::get_points() const {
-    return points;
-};
+const std::vector<Point>& Obstacle::get_points() const { return points; };
+const float Obstacle::get_radius() const { return radius; };
 
-const float Obstacle::get_radius() const {
-    return radius;
-};
+// Get axis-aligned bounding box
+void Obstacle::get_bounding_box(double& minX, double& minY, double& maxX, double& maxY) const {
+    if (points.empty()) return;
+    minX = maxX = points[0].x;
+    minY = maxY = points[0].y;
+    for (const auto& v : points) {
+        minX = std::min(minX, v.x);
+        maxX = std::max(maxX, v.x);
+        minY = std::min(minY, v.y);
+        maxY = std::max(maxY, v.y);
+    }
+}
 
 std::string Obstacle::to_string() const {
     std::stringstream oss;
@@ -308,4 +316,18 @@ void Map::paint_map() {
     
     // Optionally save to file
     // visualizer.saveToFile("/tmp/roadmap.png");
+}
+
+// Get map bounding box
+void  Map::get_bounding_box(double& minX, double& minY, double& maxX, double& maxY) const {
+    std::vector<Point> border_verteces = borders.get_points();
+    if (border_verteces.empty()) return;
+    minX = maxX = border_verteces[0].x;
+    minY = maxY = border_verteces[0].y;
+    for (const auto& v : border_verteces) {
+        minX = std::min(minX, v.x);
+        maxX = std::max(maxX, v.x);
+        minY = std::min(minY, v.y);
+        maxY = std::max(maxY, v.y);
+    }
 }

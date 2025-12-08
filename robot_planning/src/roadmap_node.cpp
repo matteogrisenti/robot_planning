@@ -10,8 +10,9 @@
 #include <geometry_msgs/PoseArray.h>
 #include <nav_msgs/Odometry.h>
 
-
 #include "roadmap/data_structures.h"
+#include "roadmap/combinatorial_planning.h"
+#include "roadmap/roadmap_visualization.h"
 
 
 /* ===================================== Obstacle Processing ======================================== */
@@ -235,7 +236,27 @@ void roadmap_init(ros::NodeHandle& nh)
     }
 
     // plot the map
-    map.paint_map();
+    // map.paint_map();
+
+
+    // initialize the Roadmap
+    std::shared_ptr<Roadmap> roadmap; 
+
+    roadmap = CombinatorialPlanning::exactCellDecomposition(map);
+
+    // Create visualizer
+    roadmap_viz::RoadmapVizConfig config;
+    config.vertex_radius = 10;  // Optional: customize
+    roadmap_viz::RoadmapVisualizer viz(config);
+
+    // Render
+    viz.render(map, roadmap);
+
+    // Display
+    viz.display();  // Shows in window
+
+    // Or save to file
+    // viz.saveToFile("roadmap.png");
 }
 
 
