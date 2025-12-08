@@ -43,26 +43,31 @@ struct Cell {
 };
 
 struct Trapezoid {
-    // The vertical walls (x-coordinates)
-    double leftX, rightX;
+        // The vertical walls (x-coordinates)
+        double leftX, rightX;
 
-    // The slanted ceiling and floor (y-coordinates)
-    double topLeftY, topRightY;       
-    double bottomLeftY, bottomRightY; 
+        // The slanted ceiling and floor (y-coordinates)
+        double topLeftY, topRightY;       
+        double bottomLeftY, bottomRightY; 
 
-    Vertex center;
-    std::vector<int> neighbors;
+        Vertex center;
+        std::vector<int> neighbors; // Indices of adjacent trapezoids in the main vector
 
-    // Constructor calculates the true geometric center
-    Trapezoid(double lx, double rx, double tly, double try_, double bly, double bry)
-        : leftX(lx), rightX(rx), 
-          topLeftY(tly), topRightY(try_), 
-          bottomLeftY(bly), bottomRightY(bry) 
-    {
-        // Average of the 4 corners for the center node
-        center = Vertex((lx + rx) / 2.0, (tly + try_ + bly + bry) / 4.0);
-    }
-};
+        // Constructor
+        Trapezoid(double lx, double rx, double tly, double try_, double bly, double bry)
+            : leftX(lx), rightX(rx), 
+              topLeftY(tly), topRightY(try_), 
+              bottomLeftY(bly), bottomRightY(bry),
+              center(0,0) // Initialize dummy
+        {
+            // Average of the 4 corners for the center node
+            center = Vertex((lx + rx) / 2.0, (tly + try_ + bly + bry) / 4.0);
+        }
+        
+        // Default constructor for vector resizing
+        Trapezoid() : leftX(0), rightX(0), topLeftY(0), topRightY(0), 
+                      bottomLeftY(0), bottomRightY(0), center(0,0) {}
+    };
 
 
 class Roadmap {

@@ -11,7 +11,9 @@
 #include <nav_msgs/Odometry.h>
 
 #include "map/map_data_structures.h"
-#include "combinatorial_planning.h"
+#include "combinatorial_planning/exact_cell_decomposition.h"
+#include "combinatorial_planning/approximate_cell_decomposition.h"
+#include "combinatorial_planning/maximum_clearance_roadmap.h"
 #include "roadmap/roadmap_visualization.h"
 
 
@@ -242,7 +244,9 @@ void roadmap_init(ros::NodeHandle& nh)
     // initialize the Roadmap
     std::shared_ptr<Roadmap> roadmap; 
 
-    roadmap = CombinatorialPlanning::exactCellDecomposition(map);
+    // roadmap = ExactDecomposition::exactCellDecomposition(map);
+    // roadmap = ApproximateDecomposition::approximateCellDecomposition(map, 5);
+    roadmap = MaxClearanceRoadmap::maximumClearanceRoadmap(map);
 
     // Create visualizer
     roadmap_viz::RoadmapVizConfig config;

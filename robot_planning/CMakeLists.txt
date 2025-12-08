@@ -136,8 +136,11 @@ add_library(map_visualization src/map/map_visualization.cpp)
 # Library to menage the Roadmap
 add_library(roadmap_data_structures src/roadmap/roadmap_data_structures.cpp)
 add_library(roadmap_visualization src/roadmap/roadmap_visualization.cpp)
-
-add_library(combinatorial_planning src/combinatorial_planning.cpp)
+# Library for combinatorial planning 
+add_library(planning_utils src/combinatorial_planning/planning_utils.cpp)
+add_library(exact_cell_decomposition src/combinatorial_planning/exact_cell_decomposition.cpp)
+add_library(approximate_cell_decomposition src/combinatorial_planning/approximate_cell_decomposition.cpp)
+add_library(maximum_clearance_roadmap src/combinatorial_planning/maximum_clearance_roadmap.cpp)
 
 target_link_libraries(map_data_structures 
     ${OpenCV_LIBS}               # ADD THIS - data_structures uses OpenCV
@@ -156,13 +159,22 @@ target_link_libraries(roadmap_data_structures
 
 target_link_libraries(roadmap_visualization
     ${OpenCV_LIBS}           # ADD THIS if visualization uses OpenCV
+    roadmap_data_structures
     ${catkin_LIBRARIES}
 )
 
-target_link_libraries(combinatorial_planning 
-    map_data_structures
-    roadmap_data_structures
+target_link_libraries(exact_cell_decomposition 
+  planning_utils
 )
+
+target_link_libraries(approximate_cell_decomposition 
+  planning_utils
+)
+
+target_link_libraries(maximum_clearance_roadmap 
+  planning_utils
+)
+
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
 ## either from message generation or dynamic reconfigure
@@ -179,7 +191,12 @@ target_link_libraries(data_verifier_node ${catkin_LIBRARIES} dubins_library)
 add_dependencies(data_verifier_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 add_executable(roadmap_node src/roadmap_node.cpp)
-target_link_libraries( roadmap_node ${catkin_LIBRARIES} ${OpenCV_LIBS} map_data_structures roadmap_visualization combinatorial_planning)
+target_link_libraries( roadmap_node ${catkin_LIBRARIES} ${OpenCV_LIBS} 
+  map_data_structures 
+  roadmap_visualization 
+  exact_cell_decomposition
+  approximate_cell_decomposition
+  maximum_clearance_roadmap )
 add_dependencies(roadmap_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Rename C++ executable without prefix
