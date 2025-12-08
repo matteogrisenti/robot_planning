@@ -130,25 +130,28 @@ include_directories(
 #   src/${PROJECT_NAME}/robot_planning.cpp
 # )
 add_library(dubins_library src/dubins_trajectory.cpp)
-add_library(data_structures src/roadmap/data_structures.cpp)
-add_library(visualization src/roadmap/visualization.cpp)
-add_library(roadmap src/roadmap/roadmap.cpp)
+# Library to menage the Map
+add_library(map_data_structures src/map/map_data_structures.cpp)
+add_library(map_visualization src/map/map_visualization.cpp)
+# Library to menage the Roadmap
+add_library(roadmap_data_structures src/roadmap/roadmap_data_structures.cpp)
 add_library(roadmap_visualization src/roadmap/roadmap_visualization.cpp)
-add_library(combinatorial_planning src/roadmap/combinatorial_planning.cpp)
 
-target_link_libraries(data_structures 
-    ${OpenCV_LIBS}           # ADD THIS - data_structures uses OpenCV
-    visualization            # ADD THIS - data_structures uses MapVisualizer
+add_library(combinatorial_planning src/combinatorial_planning.cpp)
+
+target_link_libraries(map_data_structures 
+    ${OpenCV_LIBS}               # ADD THIS - data_structures uses OpenCV
+    map_visualization            # ADD THIS - data_structures uses MapVisualizer
     ${catkin_LIBRARIES}
 )
 
-target_link_libraries(visualization
+target_link_libraries(map_visualization
     ${OpenCV_LIBS}           # ADD THIS if visualization uses OpenCV
     ${catkin_LIBRARIES}
 )
 
-target_link_libraries(roadmap 
-    data_structures
+target_link_libraries(roadmap_data_structures 
+    map_data_structures
 )
 
 target_link_libraries(roadmap_visualization
@@ -157,8 +160,8 @@ target_link_libraries(roadmap_visualization
 )
 
 target_link_libraries(combinatorial_planning 
-    roadmap
-    data_structures
+    map_data_structures
+    roadmap_data_structures
 )
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
@@ -176,7 +179,7 @@ target_link_libraries(data_verifier_node ${catkin_LIBRARIES} dubins_library)
 add_dependencies(data_verifier_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 add_executable(roadmap_node src/roadmap_node.cpp)
-target_link_libraries( roadmap_node ${catkin_LIBRARIES} ${OpenCV_LIBS} data_structures visualization roadmap_visualization combinatorial_planning)
+target_link_libraries( roadmap_node ${catkin_LIBRARIES} ${OpenCV_LIBS} map_data_structures roadmap_visualization combinatorial_planning)
 add_dependencies(roadmap_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Rename C++ executable without prefix

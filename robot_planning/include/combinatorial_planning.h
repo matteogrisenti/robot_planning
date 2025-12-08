@@ -7,7 +7,8 @@
 #include <cmath>
 #include <set>
 
-#include <roadmap/roadmap.h>
+#include <map/map_data_structures.h> 
+#include <roadmap/roadmap_data_structures.h>
 
 class CombinatorialPlanning {
 public:

@@ -4,7 +4,7 @@
 #include <opencv2/opencv.hpp>
 #include <ros/ros.h>
 
-#include "roadmap/data_structures.h"
+#include "map/map_data_structures.h"
 
 namespace map_viz {
 

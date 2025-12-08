@@ -10,8 +10,8 @@
 #include <geometry_msgs/PoseArray.h>
 #include <nav_msgs/Odometry.h>
 
-#include "roadmap/data_structures.h"
-#include "roadmap/combinatorial_planning.h"
+#include "map/map_data_structures.h"
+#include "combinatorial_planning.h"
 #include "roadmap/roadmap_visualization.h"
 
 
@@ -236,7 +236,7 @@ void roadmap_init(ros::NodeHandle& nh)
     }
 
     // plot the map
-    // map.paint_map();
+    map.paint_map();
 
 
     // initialize the Roadmap

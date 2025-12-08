@@ -9,7 +9,6 @@
 #include <limits>
 #include <memory>
 
-#include "roadmap/data_structures.h"
 
 // Simple 2D point structure
 struct Vertex {

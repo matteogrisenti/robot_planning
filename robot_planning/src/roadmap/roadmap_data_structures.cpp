@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <limits>
 
-#include "roadmap/roadmap.h"
+#include "roadmap/roadmap_data_structures.h"
 
 /*================= VERTEX ===================*/
 Vertex::Vertex(double x, double y) : x(x), y(y) {}

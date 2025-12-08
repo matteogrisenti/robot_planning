@@ -1,5 +1,5 @@
-#ifndef DATA_STRUCTURES_H
-#define DATA_STRUCTURES_H
+#ifndef MAP_DATA_STRUCTURES_H
+#define MAP_DATA_STRUCTURES_H
 
 #include <vector>
 #include <iostream> // for std::cout
@@ -181,4 +181,4 @@ public:
 
 
 
-#endif // DATA STRUCTURES
+#endif // MAP_DATA_STRUCTURES_H

@@ -1,9 +1,10 @@
 /* This file implement the library for the visualization of one roadmap. It is separate from the data strcutre to have a cleaner files and a
 better organization */
 
-#include "roadmap/visualization.h"
 #include <cmath>
 #include <limits>
+
+#include "map/map_visualization.h"
 
 namespace map_viz {
 

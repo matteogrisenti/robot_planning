@@ -1,4 +1,4 @@
-#include "roadmap/combinatorial_planning.h"
+#include "combinatorial_planning.h"
 
 #include <queue>
 #include <cmath>

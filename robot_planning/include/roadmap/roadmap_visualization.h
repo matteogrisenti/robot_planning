@@ -4,8 +4,8 @@
 #include <opencv2/opencv.hpp>
 #include <ros/ros.h>
 
-#include "roadmap/data_structures.h"
-#include "roadmap/roadmap.h"
+#include "map/map_data_structures.h"
+#include "roadmap/roadmap_data_structures.h"
 
 namespace roadmap_viz {
 

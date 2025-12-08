@@ -10,8 +10,8 @@
 #include <algorithm>
 #include <string>
 
-#include "roadmap/visualization.h"
-#include "roadmap/data_structures.h"
+#include "map/map_visualization.h"
+#include "map/map_data_structures.h"
 
 
 // ============== Borders ==============
