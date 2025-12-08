@@ -12,6 +12,7 @@ namespace ApproximateDecomposition {
 
     std::shared_ptr<Roadmap> approximateCellDecomposition(const Map& map, int maxDepth, double minCellSize) {
         auto roadmap = std::make_shared<Roadmap>();
+        roadmap->setMap(&map);
         std::vector<Cell> freeCells;
 
         // 1. Define the Root Cell (Map Bounding Box)

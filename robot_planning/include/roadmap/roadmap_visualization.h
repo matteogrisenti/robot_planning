@@ -58,17 +58,17 @@ namespace roadmap_viz {
         // Drawing functions
         void drawBorders(const Borders& borders);
         void drawObstacles(const Obstacles& obstacles);
-        void drawTrapezoids(const std::shared_ptr<Roadmap>& roadmap);
-        void drawCells(const std::shared_ptr<Roadmap>& roadmap);
-        void drawRoadmapEdges(const std::shared_ptr<Roadmap>& roadmap);
-        void drawRoadmapVertices(const std::shared_ptr<Roadmap>& roadmap);
-        void drawInfo(const std::shared_ptr<Roadmap>& roadmap);
+        void drawTrapezoids(const Roadmap& roadmap);
+        void drawCells(const Roadmap& roadmap);
+        void drawRoadmapEdges(const Roadmap& roadmap);
+        void drawRoadmapVertices(const Roadmap& roadmap);
+        void drawInfo(const Roadmap& roadmap);
         
     public:
         RoadmapVisualizer(const RoadmapVizConfig& config = RoadmapVizConfig());
         
         // Main render function
-        void render(const Map& map, const std::shared_ptr<Roadmap>& roadmap);
+        void render(const Map& map, const Roadmap& roadmap);
         
         // Display/Save functions
         void display();

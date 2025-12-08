@@ -2,7 +2,6 @@
 #include <memory>
 
 #include "map/map_builder.h"
-#include "roadmap/roadmap_visualization.h"
 #include "combinatorial_planning/exact_cell_decomposition.h"
 #include "combinatorial_planning/approximate_cell_decomposition.h"
 #include "combinatorial_planning/maximum_clearance_roadmap.h"
@@ -44,22 +43,9 @@ int main(int argc, char **argv)
             
             ROS_INFO("[RoadmapTest] Visualizing roadmap...");
             
-            // Create visualizer with config
-            roadmap_viz::RoadmapVizConfig viz_config;
-            viz_config.vertex_radius = 10;
-            roadmap_viz::RoadmapVisualizer viz(viz_config);
-            
-            // Render
-            viz.render(map, ECD_roadmap);
-            
             // Display or save
             std::string output_file = "src/robot_planning/src/test/ECD_roadmap_approx.png";
-            if (output_file.empty()) {
-                viz.display();
-            } else {
-                viz.saveToFile(output_file);
-                ROS_INFO("[RoadmapTest] Roadmap saved to: %s", output_file.c_str());
-            }
+            ECD_roadmap->plot(false, true, output_file);
         }
         
         // Test 2: Exact Cell Decomposition
@@ -75,22 +61,9 @@ int main(int argc, char **argv)
             
             ROS_INFO("[RoadmapTest] Visualizing roadmap...");
             
-            // Create visualizer with config
-            roadmap_viz::RoadmapVizConfig viz_config;
-            viz_config.vertex_radius = 10;
-            roadmap_viz::RoadmapVisualizer viz(viz_config);
-            
-            // Render
-            viz.render(map, ACD_roadmap);
-            
             // Display or save
             std::string output_file = "src/robot_planning/src/test/ACD_roadmap_approx.png";
-            if (output_file.empty()) {
-                viz.display();
-            } else {
-                viz.saveToFile(output_file);
-                ROS_INFO("[RoadmapTest] Roadmap saved to: %s", output_file.c_str());
-            }
+            ACD_roadmap->plot(false, true, output_file);
         }
         
         // Test 3: Approximate Cell Decomposition (different grid sizes)
@@ -106,22 +79,9 @@ int main(int argc, char **argv)
             
             ROS_INFO("[RoadmapTest] Visualizing roadmap...");
             
-            // Create visualizer with config
-            roadmap_viz::RoadmapVizConfig viz_config;
-            viz_config.vertex_radius = 10;
-            roadmap_viz::RoadmapVisualizer viz(viz_config);
-            
-            // Render
-            viz.render(map, MCR_roadmap);
-            
             // Display or save
             std::string output_file = "src/robot_planning/src/test/MCR_roadmap_approx.png";
-            if (output_file.empty()) {
-                viz.display();
-            } else {
-                viz.saveToFile(output_file);
-                ROS_INFO("[RoadmapTest] Roadmap saved to: %s", output_file.c_str());
-            }
+            MCR_roadmap->plot(false, true, output_file);
         }
         
         ROS_INFO("\n=== All Tests Complete ===");

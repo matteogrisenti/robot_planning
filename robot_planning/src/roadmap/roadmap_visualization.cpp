@@ -118,21 +118,19 @@ void RoadmapVisualizer::drawObstacles(const Obstacles& obstacles) {
     }
 }
 
-void RoadmapVisualizer::drawRoadmapEdges(const std::shared_ptr<Roadmap>& roadmap) {
-    if (!roadmap) return;
-    
-    int numVertices = roadmap->getNumVertices();
+void RoadmapVisualizer::drawRoadmapEdges(const Roadmap& roadmap) {
+    int numVertices = roadmap.getNumVertices();
     
     // Draw all edges
     for (int i = 0; i < numVertices; i++) {
-        const Vertex& v1 = roadmap->getVertex(i);
+        const Vertex& v1 = roadmap.getVertex(i);
         cv::Point p1 = vertexToImage(v1);
         
-        const std::vector<Edge>& edges = roadmap->getEdges(i);
+        const std::vector<Edge>& edges = roadmap.getEdges(i);
         for (const auto& edge : edges) {
             // Only draw each edge once (check if target index > current to avoid duplicates)
             if (edge.targetVertex > i) {
-                const Vertex& v2 = roadmap->getVertex(edge.targetVertex);
+                const Vertex& v2 = roadmap.getVertex(edge.targetVertex);
                 cv::Point p2 = vertexToImage(v2);
                 
                 // Draw edge line in electric blue
@@ -142,14 +140,12 @@ void RoadmapVisualizer::drawRoadmapEdges(const std::shared_ptr<Roadmap>& roadmap
     }
 }
 
-void RoadmapVisualizer::drawRoadmapVertices(const std::shared_ptr<Roadmap>& roadmap) {
-    if (!roadmap) return;
-    
-    int numVertices = roadmap->getNumVertices();
+void RoadmapVisualizer::drawRoadmapVertices(const Roadmap& roadmap) {   
+    int numVertices = roadmap.getNumVertices();
     
     // Draw all vertices as filled circles
     for (int i = 0; i < numVertices; i++) {
-        const Vertex& v = roadmap->getVertex(i);
+        const Vertex& v = roadmap.getVertex(i);
         cv::Point p = vertexToImage(v);
         
         // Draw big dot in electric blue
@@ -160,12 +156,12 @@ void RoadmapVisualizer::drawRoadmapVertices(const std::shared_ptr<Roadmap>& road
     }
 }
 
-void RoadmapVisualizer::drawTrapezoids(const std::shared_ptr<Roadmap>& roadmap) {
-    if (!roadmap || !roadmap->debugTrapezoids || roadmap->debugTrapezoids->empty()) return;
+void RoadmapVisualizer::drawTrapezoids(const Roadmap& roadmap) {
+    if (!roadmap.debugTrapezoids || roadmap.debugTrapezoids->empty()) return;
 
     cv::Scalar gridColor(211, 211, 211); // Light Gray
 
-    for (const auto& trap : *roadmap->debugTrapezoids) {
+    for (const auto& trap : *roadmap.debugTrapezoids) {
         // Use the new 4 corners
         cv::Point p1 = worldToImage(trap.leftX, trap.topLeftY);     // Top-Left
         cv::Point p2 = worldToImage(trap.rightX, trap.topRightY);    // Top-Right
@@ -180,16 +176,16 @@ void RoadmapVisualizer::drawTrapezoids(const std::shared_ptr<Roadmap>& roadmap) 
     }
 }
 
-void RoadmapVisualizer::drawCells(const std::shared_ptr<Roadmap>& roadmap) {
+void RoadmapVisualizer::drawCells(const Roadmap& roadmap) {
     // 1. Check if the pointer exists
-    if (!roadmap || !roadmap->debugCells || roadmap->debugCells->empty()) {
+    if (!roadmap.debugCells || roadmap.debugCells->empty()) {
         return;
     }
 
     // Light gray color
     cv::Scalar gridColor(211, 211, 211);
 
-    for (const auto& cell : *roadmap->debugCells) {
+    for (const auto& cell : *roadmap.debugCells) {
         // Cells are Axis-Aligned Bounding Boxes (AABB) defined by min/max X/Y
         cv::Point topLeft = worldToImage(cell.minX, cell.maxY);
         cv::Point bottomRight = worldToImage(cell.maxX, cell.minY);
@@ -199,14 +195,12 @@ void RoadmapVisualizer::drawCells(const std::shared_ptr<Roadmap>& roadmap) {
     }
 }
 
-void RoadmapVisualizer::drawInfo(const std::shared_ptr<Roadmap>& roadmap) {
-    if (!roadmap) return;
-    
+void RoadmapVisualizer::drawInfo(const Roadmap& roadmap) {   
     // Draw statistics in top-left corner
-    int numVertices = roadmap->getNumVertices();
+    int numVertices = roadmap.getNumVertices();
     int totalEdges = 0;
     for (int i = 0; i < numVertices; i++) {
-        totalEdges += roadmap->getEdges(i).size();
+        totalEdges += roadmap.getEdges(i).size();
     }
     totalEdges /= 2; // Bidirectional edges counted twice
     
@@ -230,7 +224,7 @@ void RoadmapVisualizer::drawInfo(const std::shared_ptr<Roadmap>& roadmap) {
                 cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(255, 255, 255), 2);
 }
 
-void RoadmapVisualizer::render(const Map& map, const std::shared_ptr<Roadmap>& roadmap) {
+void RoadmapVisualizer::render(const Map& map, const Roadmap& roadmap) {
     // Reset canvas
     canvas_ = cv::Mat(config_.img_height, config_.img_width, CV_8UC3, config_.color_background);
     

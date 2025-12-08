@@ -38,6 +38,7 @@ namespace MaxClearanceRoadmap {
 
     std::shared_ptr<Roadmap> maximumClearanceRoadmap(const Map& map, double gridResolution) {
         auto roadmap = std::make_shared<Roadmap>();
+        roadmap->setMap(&map);
 
         // 1. Determine Grid Dimensions
         double minX, minY, maxX, maxY;

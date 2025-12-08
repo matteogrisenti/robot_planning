@@ -6,6 +6,7 @@
 #include <limits>
 
 #include "roadmap/roadmap_data_structures.h"
+#include "roadmap/roadmap_visualization.h"
 
 /*================= VERTEX ===================*/
 Vertex::Vertex(double x, double y) : x(x), y(y) {}
@@ -24,7 +25,7 @@ Edge::Edge(int target, double w) : targetVertex(target), weight(w) {}
 
 
 /*================= ROADMAP ===================*/
-Roadmap::Roadmap() {}
+Roadmap::Roadmap() : linkedMap(nullptr) {}
 
 // Add a vertex and return its index
 int Roadmap::addVertex(const Vertex& p) {
@@ -44,6 +45,9 @@ void Roadmap::addEdge(int from, int to, bool bidirectional){
         adjacencyList[to].push_back(Edge(from, weight));
     }
 }
+
+void Roadmap::setMap(const Map* map_ptr) { this->linkedMap = map_ptr; }
+const Map* Roadmap::getMap() const { return this->linkedMap; }
 
 // Get number of vertices
 int Roadmap::getNumVertices() const {
@@ -87,4 +91,30 @@ std::vector<int> Roadmap::findKNearestNeighbors(int vertexIdx, int k) const {
     }
     
     return neighbors;
+}
+
+void Roadmap::plot(bool display, bool save, std::string output_path) {
+    // Create visualizer with config
+    roadmap_viz::RoadmapVizConfig viz_config;
+    viz_config.vertex_radius = 10;
+    roadmap_viz::RoadmapVisualizer viz(viz_config);
+    
+    // Render
+    if (this->linkedMap != nullptr) {
+        viz.render(*this->linkedMap, *this);
+    } else {
+        // Handle error: Map hasn't been set yet!
+        std::cerr << "Error: Cannot plot roadmap because no Map is linked." << std::endl;
+        return;
+    }
+    
+    // Display or save
+    if (save && !output_path.empty()) {
+        // CORRECTED: used 'output_path' instead of undefined 'output_file'
+        viz.saveToFile(output_path); 
+        ROS_INFO("[RoadmapTest] Roadmap saved to: %s", output_path.c_str());
+    }
+    if(display){
+        viz.display();
+    }
 }

@@ -9,6 +9,7 @@
 #include <limits>
 #include <memory>
 
+#include "map/map_data_structures.h"
 
 // Simple 2D point structure
 struct Vertex {
@@ -74,6 +75,9 @@ class Roadmap {
 private:
     std::vector<Vertex> vertices;
     std::vector<std::vector<Edge>> adjacencyList; // edges for each vertex
+
+    // Pointer to the Map on which the Roadmap is created
+    const Map* linkedMap;
     
     // Helper: check if edge is collision-free (placeholder)
     bool isEdgeValid(const Vertex& p1, const Vertex& p2) const;
@@ -92,6 +96,10 @@ public:
     
     // Add an edge (optionally bidirectional)
     void addEdge(int from, int to, bool bidirectional = true);
+
+    // Methods to handle the Map pointer
+    void setMap(const Map* map_ptr);
+    const Map* getMap() const;
     
     // Get number of vertices
     int getNumVertices() const;
@@ -101,6 +109,9 @@ public:
     
     // Get edges from a vertex
     const std::vector<Edge>& getEdges(int vertexIdx) const;
+
+    // plot the Roadmap
+    void plot(bool display, bool save, std::string output_path = "");
 };
 
 #endif // ROADMAP_H

@@ -43,6 +43,7 @@ namespace ExactDecomposition {
 
     std::shared_ptr<Roadmap> exactCellDecomposition(const Map& map) {
         auto roadmap = std::make_shared<Roadmap>();
+        roadmap->setMap(&map);
 
         // 1. Compute Decomposition
         std::vector<Trapezoid> trapezoids = computeTrapezoidalDecomposition(map);

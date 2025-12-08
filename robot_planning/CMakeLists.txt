@@ -162,24 +162,27 @@ target_link_libraries(map_builder
 
 target_link_libraries(roadmap_data_structures 
     map_data_structures
+    roadmap_visualization
 )
 
 target_link_libraries(roadmap_visualization
     ${OpenCV_LIBS}           # ADD THIS if visualization uses OpenCV
-    roadmap_data_structures
     ${catkin_LIBRARIES}
 )
 
 target_link_libraries(exact_cell_decomposition 
   planning_utils
+  roadmap_data_structures  # <--- ADD THIS
 )
 
 target_link_libraries(approximate_cell_decomposition 
   planning_utils
+  roadmap_data_structures  # <--- ADD THIS
 )
 
 target_link_libraries(maximum_clearance_roadmap 
   planning_utils
+  roadmap_data_structures  # <--- ADD THIS
 )
 
 ## Add cmake target dependencies of the library
@@ -200,11 +203,11 @@ add_dependencies(data_verifier_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin
 # Test node
 add_executable(roadmap_test_node src/test/roadmap_test_node.cpp )
 target_link_libraries(roadmap_test_node
-  map_builder
-  roadmap_visualization 
+  map_builder 
   exact_cell_decomposition
   approximate_cell_decomposition
   maximum_clearance_roadmap
+  roadmap_data_structures  # <--- ADD THIS
   ${catkin_LIBRARIES}
 )
 add_dependencies(roadmap_test_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
