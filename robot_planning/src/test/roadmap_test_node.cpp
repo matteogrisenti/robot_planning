@@ -26,7 +26,8 @@ int main(int argc, char **argv)
         Map map = builder.buildMap();
         
         // Display the map
-        map.paint_map();
+        std::string output_map_file = "src/robot_planning/src/test/map.png";
+        map.plot(false, true, output_map_file);
         
         ROS_INFO("=== Testing Different Algorithms ===");
         

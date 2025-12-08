@@ -304,7 +304,7 @@ std::string Victims::to_string() const {
 // ============== Map ==============
 Map::Map() = default;
 
-void Map::paint_map() {
+void Map::plot(bool display, bool save, std::string output_path) {
     // Create visualizer with default config
     map_viz::MapVisualizer visualizer;
     
@@ -312,10 +312,9 @@ void Map::paint_map() {
     visualizer.render(*this);
     
     // Display
-    visualizer.display();
+    if(display) visualizer.display();
     
-    // Optionally save to file
-    // visualizer.saveToFile("/tmp/roadmap.png");
+    if(save) visualizer.saveToFile(output_path);
 }
 
 // Get map bounding box

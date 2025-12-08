@@ -173,7 +173,7 @@ public:
 
     Map();
 
-    void paint_map();
+    void plot(bool display, bool save, std::string output_path);
 
     // Get map bounding box
     void get_bounding_box(double& minX, double& minY, double& maxX, double& maxY) const; 
