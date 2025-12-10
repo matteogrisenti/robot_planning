@@ -19,13 +19,9 @@ find_package(catkin REQUIRED COMPONENTS
 find_package(OpenCV REQUIRED)
 
 catkin_package(
-<<<<<<< HEAD
 #  INCLUDE_DIRS include
 #  LIBRARIES robot_planning
   CATKIN_DEPENDS roscpp rospy std_msgs geometry_msgs obstacles_msgs nav_msgs
-=======
-  CATKIN_DEPENDS roscpp rospy std_msgs geometry_msgs obstacles_msgs
->>>>>>> 310de8918d86c3fa745998be87e103a96f3def9f
   DEPENDS OpenCV
 )
 
@@ -41,48 +37,48 @@ include_directories(
 # ==============================================================================
 # Libraries
 # ==============================================================================
-add_library(dubins_library src/dubins_trajectory.cpp)
-<<<<<<< HEAD
 # Library to menage the Map
 add_library(map_data_structures src/map/map_data_structures.cpp)
 add_library(map_visualization src/map/map_visualization.cpp)
 add_library(map_builder src/map/map_builder.cpp)
+target_link_libraries(map_data_structures 
+    ${OpenCV_LIBS}               
+    map_visualization            # map_data_structures uses map_visualization
+    ${catkin_LIBRARIES}
+)
+target_link_libraries(map_visualization
+    ${OpenCV_LIBS}              # map_visualization uses OpenCV
+    ${catkin_LIBRARIES}         # map_visualization uses MapVisualizer
+)
+target_link_libraries(map_builder 
+    map_data_structures            # map_builder uses map_data_structures
+    ${catkin_LIBRARIES}
+)
+
+
 # Library to menage the Roadmap
 add_library(roadmap_data_structures src/roadmap/roadmap_data_structures.cpp)
 add_library(roadmap_visualization src/roadmap/roadmap_visualization.cpp)
+target_link_libraries(roadmap_data_structures 
+    map_data_structures
+    roadmap_visualization
+)
+target_link_libraries(roadmap_visualization
+    ${OpenCV_LIBS}          
+    ${catkin_LIBRARIES}
+)
+
+
+# Library to menage the DUblins Trajectory
+add_library(dubins_library src/dubins_trajectory.cpp)
+add_library(collision_checker_lib src/collision_checker.cpp)
+
+
 # Library for combinatorial planning 
 add_library(planning_utils src/combinatorial_planning/planning_utils.cpp)
 add_library(exact_cell_decomposition src/combinatorial_planning/exact_cell_decomposition.cpp)
 add_library(approximate_cell_decomposition src/combinatorial_planning/approximate_cell_decomposition.cpp)
 add_library(maximum_clearance_roadmap src/combinatorial_planning/maximum_clearance_roadmap.cpp)
-
-
-target_link_libraries(map_data_structures 
-    ${OpenCV_LIBS}               # ADD THIS - data_structures uses OpenCV
-    map_visualization            # ADD THIS - data_structures uses MapVisualizer
-    ${catkin_LIBRARIES}
-)
-
-target_link_libraries(map_visualization
-    ${OpenCV_LIBS}           # ADD THIS if visualization uses OpenCV
-    ${catkin_LIBRARIES}
-)
-
-target_link_libraries(map_builder 
-    map_data_structures            # ADD THIS - data_structures uses MapVisualizer
-    ${catkin_LIBRARIES}
-)
-
-target_link_libraries(roadmap_data_structures 
-    map_data_structures
-    roadmap_visualization
-)
-
-target_link_libraries(roadmap_visualization
-    ${OpenCV_LIBS}           # ADD THIS if visualization uses OpenCV
-    ${catkin_LIBRARIES}
-)
-
 target_link_libraries(exact_cell_decomposition 
   planning_utils
   roadmap_data_structures  # <--- ADD THIS
@@ -97,45 +93,22 @@ target_link_libraries(maximum_clearance_roadmap
   planning_utils
   roadmap_data_structures  # <--- ADD THIS
 )
-=======
-add_library(collision_checker_lib src/collision_checker.cpp)
-add_library(data_structures src/data_structures.cpp)
->>>>>>> 310de8918d86c3fa745998be87e103a96f3def9f
-
-target_link_libraries(data_structures
-  ${catkin_LIBRARIES}
-  ${OpenCV_LIBRARIES}
-  dubins_library
-  collision_checker_lib
-)
 
 # ==============================================================================
 # Executables
 # ==============================================================================
-
-# --- Roadmap Node (COMMENTED OUT: Missing src/roadmap_node.cpp) ---
-# add_executable(roadmap_node src/roadmap_node.cpp)
-# target_link_libraries(roadmap_node
-#   ${catkin_LIBRARIES} 
-#   ${OpenCV_LIBRARIES} 
-#   data_structures
-#   dubins_library
-#   collision_checker_lib
-# )
-# add_dependencies(roadmap_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 # --- Data Verifier Node ---
 add_executable(data_verifier_node src/data_verifier_node.cpp)
 target_link_libraries(data_verifier_node 
   ${catkin_LIBRARIES} 
   ${OpenCV_LIBRARIES}
-  data_structures
+  map_builder
   dubins_library
   collision_checker_lib
 )
 add_dependencies(data_verifier_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
-<<<<<<< HEAD
 # Test node
 add_executable(roadmap_test_node src/combinatorial_planning/roadmap_test_node.cpp )
 target_link_libraries(roadmap_test_node
@@ -217,5 +190,3 @@ add_dependencies(roadmap_test_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_
 
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
-=======
->>>>>>> 310de8918d86c3fa745998be87e103a96f3def9f

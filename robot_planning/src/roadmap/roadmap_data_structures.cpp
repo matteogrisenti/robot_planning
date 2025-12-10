@@ -8,6 +8,8 @@
 #include "roadmap/roadmap_data_structures.h"
 #include "roadmap/roadmap_visualization.h"
 
+
+
 /*================= VERTEX ===================*/
 Vertex::Vertex(double x, double y) : x(x), y(y) {}
 

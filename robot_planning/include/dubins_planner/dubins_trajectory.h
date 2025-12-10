@@ -1,3 +1,6 @@
+#ifndef DUBINS_TRAJECTORY_H
+#define DUBINS_TRAJECTORY_H
+
 #include <cmath>
 #include <vector>
 #include <assert.h>
@@ -98,3 +101,6 @@ void dubins_shortest_path(long double, long double, long double, long double, lo
 void plotarc(dubinsarc_out *, std::vector<std::vector<long double>> &points);
 
 void plot_dubins(dubinscurve_out *, std::vector<std::vector<int>> &c1, std::vector<std::vector<int>> &c2, std::vector<std::vector<int>> &c3);
+
+
+#endif 

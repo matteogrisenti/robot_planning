@@ -5,8 +5,6 @@
 #include <iostream> // for std::cout
 #include <iomanip>  // for std::setprecision
 
-#include "dubins_planner/collision_checker.h"
-
 struct Point {
     double x;
     double y;
