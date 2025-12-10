@@ -18,16 +18,6 @@ CollisionChecker::CollisionChecker(double robot_radius, double safety_margin) {
     effective_radius_sq_ = effective_robot_radius_ * effective_robot_radius_;
 }
 
-
-// --- Funzione Principale di Check ---
-// MERGE CHANGE 
-// Since now the cache of cached_circles_ , cached_polygons_ are attribute of the calss they no more need 
-// to be passed as parameters
-
-// bool CollisionChecker::check(const Point2D& robot_pose, 
-//                             const std::vector<CircleObstacle>& circles,
-//                             const std::vector<PolygonObstacle>& polygons) const {
-
 bool CollisionChecker::check(const Point2D& robot_pose) const{
     // 1. Check Ostacoli Circolari (Veloce ed Esatto)
     for (const auto& obs : cached_circles_) {
@@ -130,14 +120,6 @@ double CollisionChecker::distToSegmentSquared(const Point2D& p, const Point2D& a
 
 
 
-
-// MERGED CHANEGE
-// Since this method have been moved from Roadmap to CollisionChecker also their implementation
-// have been moved
-
-// MERGED CHANGE 
-// Since the method is not more inside the Roadmap, we need to pass the reference to the map to have
-// access to the borders & obstacle information
 void CollisionChecker::update_collision_cache(const Map& map) {
     cached_circles_.clear();
     cached_polygons_.clear();
@@ -201,31 +183,8 @@ void CollisionChecker::update_collision_cache(const Map& map) {
 // --- Check Puntuale ---
 bool CollisionChecker::is_state_valid(double x, double y) const {
     // Ritorna TRUE se il punto è LIBERO (CollisionChecker.check ritorna true se COLLIDE)
-    // return !collision_checker_.check({x, y}, cached_circles_, cached_polygons_);
-
-    // MERGE CHANGE
-    /* Since now this is a method of the Collisio Checker class it call directly the method */
     return !check({x,y});
 }
-
-// MERGE CHANGE
-/* I add as parameter the same subins curve reference; insted to recompute a second time inside the
-this method */
-// bool CollisionChecker::is_dubins_path_valid(const Point& start, double start_theta, 
-//                                    const Point& end, double end_theta, 
-//                                    double rho, const dubinscurve_out& curve) const {
-    
-    // MERGE CHANGE: now the curve is passed as reference 
-    // dubinscurve_out curve;
-
-    // Configura parametri Dubins
-    // double k_max = 1.0 / rho;
-    // int best_word = -1;
-
-    // 1. Calcola la curva
-    // dubins_shortest_path(start.x, start.y, start_theta, 
-    //                      end.x, end.y, end_theta, 
-    //                      k_max, best_word, &curve);
 
 
 bool CollisionChecker::is_dubins_path_valid(const int best_word, const dubinscurve_out& curve) const {

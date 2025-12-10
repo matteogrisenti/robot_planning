@@ -4,9 +4,6 @@
 #include <geometry_msgs/Polygon.h>
 #include <visualization_msgs/MarkerArray.h>
 
-
-// MERGE CHANGE
-// Added the module that menage automusly the read and organisation of the data of the map
 #include "map/map_builder.h"
 #include "roadmap/roadmap_data_structures.h"
 #include "dubins_planner/collision_checker.h"
@@ -30,43 +27,17 @@ private:
 
     ros::Publisher pub_markers;
 
-    // MERGE CHANGE
-    /* The logic of read the map information has been moved in the map logic: include/map/ */
-    // Subscriber
-    // ros::Subscriber sub_borders, sub_gates, sub_obs, sub_victims;
-    // Stato del nodo
-    // bool map_ready = false;
-    // struct {
-    //     bool borders = false;
-    //     bool gates = false;
-    //     bool obstacles = false;
-    //     bool victims = false;
-    // } received;
-
     Point goal_pos;
     double goal_theta = 0.0;
 
     Map map_; 
     bool map_ready = false; // Flag to ensure map is loaded
 
-    // MERGE CHANGE
-    /* For the new organization of data the roadmap should be only the set of vertex and edges;
-    For this reason I thoungh tha was better to extrapolate the collision checker as an external entity
-    that is initialized on the same map and check indipendently the collision of path */
     CollisionChecker collision_checker;
     
 
 public:
     DataVerifierNode() : collision_checker(0.25, 0.05){     // Raggio robot 0.25, Safety 0.05
-        
-        // MERGE CHANGE 
-        /* This logic has been sobstituted with the map_builder logic (include/map/map_builder) with implement all this in a library
-        make the code more clean */
-        // Topic setup 
-        // sub_borders = nh.subscribe("/map_borders", 1, &DataVerifierNode::cbBorders, this);
-        // sub_gates   = nh.subscribe("/gates", 1, &DataVerifierNode::cbGates, this);
-        // sub_obs     = nh.subscribe("/obstacles", 1, &DataVerifierNode::cbObstacles, this);
-        // sub_victims = nh.subscribe("/victims", 1, &DataVerifierNode::cbVictims, this);
 
         // 1. Build the map
         ROS_INFO("Building map...");
@@ -95,83 +66,12 @@ public:
             goal_pos.y = 0.0;
         }
 
-        // MERGE CHANGE
-        /* AS the Checher is an autonom entity it need to be initilized separatley; before it was made
-        insede the constructor of the Roadmap class, now it is no more possible */
         ROS_INFO("Initilize the Collision Checker...");                 
         collision_checker.update_collision_cache(map_);   // Intiliazize the checker with the map borders and obstacles
          
         pub_markers = nh.advertise<visualization_msgs::MarkerArray>("/verifier/debug_markers", 1);
         // ROS_INFO("DataVerifierNode avviato. In attesa della mappa...");
     }
-
-    /* --- CALLBACKS: Riempiono solo le strutture dati ---
-    This code is all implemented in the MapBuilder class in the map/map_builder.h include file
-    void cbBorders(const geometry_msgs::Polygon::ConstPtr& msg) {
-        if (received.borders) return;
-        for (const auto& p : msg->points) roadmap.mapBorders.add_point(p.x, p.y, p.z);
-        received.borders = true;
-        checkBuild();
-    }
-
-    void cbGates(const geometry_msgs::PoseArray::ConstPtr& msg) {
-        if (received.gates) return;
-        for (const auto& pose : msg->poses) {
-            Point p = {pose.position.x, pose.position.y, pose.position.z};
-            Orientation o = {pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w};
-            roadmap.gates.add_gate(p, o);
-
-            // Usiamo il primo gate come target di test
-            if (roadmap.gates.get_gates().size() == 1) {
-                goal_pos = p;
-                // Yaw da Quaternione
-                goal_theta = std::atan2(2.0 * (o.w * o.z + o.x * o.y), 1.0 - 2.0 * (o.y * o.y + o.z * o.z));
-            }
-        }
-        received.gates = true;
-        checkBuild();
-    }
-
-    void cbObstacles(const obstacles_msgs::ObstacleArrayMsg::ConstPtr& msg) {
-        if (received.obstacles) return;
-        for (const auto& obs : msg->obstacles) {
-            std::vector<Point> pts;
-            for (const auto& p : obs.polygon.points) pts.push_back({p.x, p.y, p.z});
-            roadmap.obstacles.add_obstacle(&pts, obs.radius);
-        }
-        received.obstacles = true;
-        checkBuild();
-    }
-
-    void cbVictims(const obstacles_msgs::ObstacleArrayMsg::ConstPtr& msg) {
-        if (received.victims) return;
-        for (const auto& v : msg->obstacles) {
-            if (v.polygon.points.empty()) continue;
-            Point c = {v.polygon.points[0].x, v.polygon.points[0].y, v.polygon.points[0].z};
-            roadmap.victims.add_victim(c, v.radius);
-        }
-        received.victims = true;
-        checkBuild();
-    }
-    */
-
-
-    
-    // MERGE CHANGE
-    // This is implemente already in the costrucot of the node; line 79: 
-    //      collision_checker.update_collision_cache(map)
-    /*  --- LOGICA DI COSTRUZIONE ---
-    void checkBuild() {
-        if (map_ready) return;
-        if (received.borders && received.gates && received.obstacles && received.victims) {
-            ROS_INFO("Tutti i dati ricevuti. Generazione Collision Cache...");
-            // QUi avviene la magia: conversione da ROS raw data a poligoni ottimizzati
-            roadmap.update_collision_cache();
-            map_ready = true;
-            ROS_INFO("Roadmap pronta per la verifica logica.");
-        }
-    }
-    */
 
     // --- LOOP DI VERIFICA (Running at rate) ---
     void run_verification() {
@@ -191,9 +91,7 @@ public:
         
         bool logic_valid = false;
         if (best_idx >= 0) {
-            // MERGE CHANGE: update the call with the new perameters
             // 3. Verifica Collisioni sulla path (Collision Checker)
-            // logic_valid = roadmap.is_dubins_path_valid(start, start_theta, goal_pos, goal_theta, rho);
             logic_valid = collision_checker.is_dubins_path_valid(best_idx, curve);
         }
 
