@@ -1,6 +1,10 @@
 #include <iostream>
 #include "dubins_planner/dubins_trajectory.h"
 
+// Define global variables declared as extern in header
+bool DEBUG = false;
+int no_of_samples = 100;
+
 /*====================================================================
 ===========================Helper functions===========================
 ====================================================================*/

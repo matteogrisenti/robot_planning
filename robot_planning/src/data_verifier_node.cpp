@@ -1,191 +1,217 @@
 #include <ros/ros.h>
 #include <obstacles_msgs/ObstacleArrayMsg.h>
-#include <geometry_msgs/Pose.h>
+#include <geometry_msgs/PoseArray.h>
+#include <geometry_msgs/Polygon.h>
 #include <visualization_msgs/MarkerArray.h>
-#include <vector>
-#include <cmath>
-#include <string>
-#include <algorithm>
 
-// --- INTEGRAZIONE LIBRERIA DUBINS ---
-#include "dubins_planner/dubins_trajectory.h"
+// Includiamo l'header principale che aggrega tutto (CollisionChecker, Dubins, Strutture)
+#include "roadmap/data_structures.h"
 
-// ============================================================================
-// DEFINIZIONE VARIABILI GLOBALI (Richieste dalla libreria "sporca" C-Style)
-// Senza queste righe, avrai errori di linker "undefined reference"
-// ============================================================================
-bool DEBUG = false; // Mettilo a true se vuoi spam nel terminale
+// --- VARIABILI GLOBALI DUBINS (Necessarie per la libreria legacy C-Style) ---
+// Non toccare queste, servono a dubins_trajectory.cpp
+bool DEBUG = false;
 long double X0, Y0, Th0, Xf, Yf, Thf, Kmax;
 int pidx;
 int no_waypts, step, no_of_samples;
 long double angle_step;
 dubinscurve_out dubin_curve;
-point init_pt, final_pt; // Rinominato per evitare conflitti con init()
+point init_pt, final_pt;
 std::vector<point> best_path;
-// ============================================================================
+// --------------------------------------------------------------------------
 
-class DataVerifier {
+class DataVerifierNode {
 private:
     ros::NodeHandle nh;
-    ros::Subscriber sub_obs;
-    ros::Subscriber sub_victims;
-    ros::Subscriber sub_gate;
+    
+    // Subscriber
+    ros::Subscriber sub_borders, sub_gates, sub_obs, sub_victims;
+    // Publisher Debug
     ros::Publisher pub_markers;
 
-    bool gate_received = false;
+    // Logica Core
+    Roadmap roadmap;
+    
+    // Stato del nodo
+    bool map_ready = false;
+    struct {
+        bool borders = false;
+        bool gates = false;
+        bool obstacles = false;
+        bool victims = false;
+    } received;
+
+    Point goal_pos;
+    double goal_theta = 0.0;
 
 public:
-    DataVerifier() {
-        pub_markers = nh.advertise<visualization_msgs::MarkerArray>("/debug/environment_markers", 1, true);
-        sub_obs = nh.subscribe("/obstacles", 1, &DataVerifier::obstaclesCallback, this);
-        sub_victims = nh.subscribe("/victims", 1, &DataVerifier::victimsCallback, this);
-        sub_gate = nh.subscribe("/gate_position", 1, &DataVerifier::gateCallback, this);
+    DataVerifierNode() : roadmap(0.25, 0.05) { // Raggio robot 0.25, Safety 0.05
         
-        ROS_INFO("--- DATA VERIFIER + DUBINS TESTER STARTED ---");
+        // Topic setup
+        sub_borders = nh.subscribe("/map_borders", 1, &DataVerifierNode::cbBorders, this);
+        sub_gates   = nh.subscribe("/gates", 1, &DataVerifierNode::cbGates, this);
+        sub_obs     = nh.subscribe("/obstacles", 1, &DataVerifierNode::cbObstacles, this);
+        sub_victims = nh.subscribe("/victims", 1, &DataVerifierNode::cbVictims, this);
+        
+        pub_markers = nh.advertise<visualization_msgs::MarkerArray>("/verifier/debug_markers", 1);
+
+        ROS_INFO("DataVerifierNode avviato. In attesa della mappa...");
     }
 
-    // --- FUNZIONI DI VISUALIZZAZIONE ESISTENTI (Vittime/Gate) ---
-    void victimsCallback(const obstacles_msgs::ObstacleArrayMsg::ConstPtr& msg) {
-        if (msg->obstacles.empty()) return;
-        visualization_msgs::MarkerArray marker_array;
-        int id = 1000;
-        double max_score = 1.0;
-        for (const auto& victim : msg->obstacles) if (victim.radius > max_score) max_score = victim.radius;
+    // --- CALLBACKS: Riempiono solo le strutture dati ---
 
-        for (const auto& victim : msg->obstacles) {
-            if (victim.polygon.points.empty()) continue;
-            double cx = victim.polygon.points[0].x;
-            double cy = victim.polygon.points[0].y;
-            double score = victim.radius;
-            double scale_factor = std::max((score / max_score) * 1.0, 0.2);
+    void cbBorders(const geometry_msgs::Polygon::ConstPtr& msg) {
+        if (received.borders) return;
+        for (const auto& p : msg->points) roadmap.mapBorders.add_point(p.x, p.y, p.z);
+        received.borders = true;
+        checkBuild();
+    }
 
-            visualization_msgs::Marker sphere;
-            sphere.header.frame_id = "map";
-            sphere.header.stamp = ros::Time::now();
-            sphere.ns = "victims";
-            sphere.id = id++;
-            sphere.type = visualization_msgs::Marker::SPHERE;
-            sphere.action = visualization_msgs::Marker::ADD;
-            sphere.pose.position.x = cx; sphere.pose.position.y = cy; sphere.pose.position.z = 0.0;
-            sphere.pose.orientation.w = 1.0;
-            sphere.scale.x = scale_factor; sphere.scale.y = scale_factor; sphere.scale.z = 0.1;
-            sphere.color.g = (float)(score / max_score); sphere.color.a = 0.8; sphere.color.r = 0.0; sphere.color.b = 0.0;
-            marker_array.markers.push_back(sphere);
+    void cbGates(const geometry_msgs::PoseArray::ConstPtr& msg) {
+        if (received.gates) return;
+        for (const auto& pose : msg->poses) {
+            Point p = {pose.position.x, pose.position.y, pose.position.z};
+            Orientation o = {pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w};
+            roadmap.gates.add_gate(p, o);
+
+            // Usiamo il primo gate come target di test
+            if (roadmap.gates.get_gates().size() == 1) {
+                goal_pos = p;
+                // Yaw da Quaternione
+                goal_theta = std::atan2(2.0 * (o.w * o.z + o.x * o.y), 1.0 - 2.0 * (o.y * o.y + o.z * o.z));
+            }
         }
-        pub_markers.publish(marker_array);
+        received.gates = true;
+        checkBuild();
     }
 
-    void gateCallback(const geometry_msgs::Pose::ConstPtr& msg) {
-        if (gate_received) return;
-        gate_received = true;
-        visualization_msgs::Marker marker;
-        marker.header.frame_id = "map";
-        marker.header.stamp = ros::Time::now();
-        marker.ns = "gate";
-        marker.id = 9999;
-        marker.type = visualization_msgs::Marker::CUBE;
-        marker.action = visualization_msgs::Marker::ADD;
-        marker.pose = *msg;
-        marker.pose.position.z = 1.0;
-        marker.scale.x = 1.0; marker.scale.y = 0.2; marker.scale.z = 5.0;
-        marker.color.b = 1.0; marker.color.a = 1.0;
-        visualization_msgs::MarkerArray marker_array;
-        marker_array.markers.push_back(marker);
-        pub_markers.publish(marker_array);
+    void cbObstacles(const obstacles_msgs::ObstacleArrayMsg::ConstPtr& msg) {
+        if (received.obstacles) return;
+        for (const auto& obs : msg->obstacles) {
+            std::vector<Point> pts;
+            for (const auto& p : obs.polygon.points) pts.push_back({p.x, p.y, p.z});
+            roadmap.obstacles.add_obstacle(&pts, obs.radius);
+        }
+        received.obstacles = true;
+        checkBuild();
     }
 
-    void obstaclesCallback(const obstacles_msgs::ObstacleArrayMsg::ConstPtr& msg) {
-        // Implementazione opzionale per ostacoli
+    void cbVictims(const obstacles_msgs::ObstacleArrayMsg::ConstPtr& msg) {
+        if (received.victims) return;
+        for (const auto& v : msg->obstacles) {
+            if (v.polygon.points.empty()) continue;
+            Point c = {v.polygon.points[0].x, v.polygon.points[0].y, v.polygon.points[0].z};
+            roadmap.victims.add_victim(c, v.radius);
+        }
+        received.victims = true;
+        checkBuild();
     }
 
-    // --- NUOVA LOGICA DUBINS ---
-
-    // Helper per campionare un arco usando la funzione 'circline' della libreria
-    void sampleAndAddToMarker(dubinsarc_out* arc, visualization_msgs::Marker& marker) {
-        double step_size = 0.1; // Campionamento ogni 10cm
-        int steps = std::ceil(arc->l / step_size);
-        
-        for (int i = 0; i <= steps; ++i) {
-            double s = i * step_size;
-            if (s > arc->l) s = arc->l; // Clamp
-
-            long double x, y, th; // Tipi della libreria
-            // Chiamata alla funzione della libreria importata
-            circline(s, arc->x0, arc->y0, arc->th0, arc->k, x, y, th);
-
-            geometry_msgs::Point p;
-            p.x = (double)x;
-            p.y = (double)y;
-            p.z = 0.0;
-            marker.points.push_back(p);
+    // --- LOGICA DI COSTRUZIONE ---
+    
+    void checkBuild() {
+        if (map_ready) return;
+        if (received.borders && received.gates && received.obstacles && received.victims) {
+            ROS_INFO("Tutti i dati ricevuti. Generazione Collision Cache...");
+            // QUi avviene la magia: conversione da ROS raw data a poligoni ottimizzati
+            roadmap.update_collision_cache();
+            map_ready = true;
+            ROS_INFO("Roadmap pronta per la verifica logica.");
         }
     }
 
-    void publishTestDubins() {
-        // 1. Setup Parametri (Usiamo le variabili globali della libreria o parametri locali passati alla funzione)
-        double start_x = 0.0, start_y = 0.0, start_th = 0.0;
-        double goal_x = -3.0, goal_y = 2.0, goal_th = 3.14; // Una manovra "indietro" complessa
-        
-        // Raggio minimo 0.5m -> Curvatura Max = 1/0.5 = 2.0
-        double turning_radius = 0.5;
-        double k_max = 1.0 / turning_radius;
+    // --- LOOP DI VERIFICA (Running at rate) ---
 
-        // 2. Calcolo (Chiamata alla funzione C-style)
-        int best_primitive_idx = -1;
-        dubinscurve_out result_curve;
-        
-        // Firma: (x0, y0, th0, xf, yf, thf, Kmax, &pidx, &curve)
-        dubins_shortest_path(start_x, start_y, start_th, 
-                             goal_x, goal_y, goal_th, 
-                             k_max, best_primitive_idx, &result_curve);
+    void run_verification() {
+        if (!map_ready) return;
 
+        // 1. Definiamo scenario di test (Start -> Gate)
+        Point start = {0.0, 0.0, 0.0};
+        double start_theta = 0.0; // Robot guarda verso X+
+        double rho = 0.5; // Raggio curvatura minimo
         
-        // Debug: Prima controlla se il calcolo è andato a buon fine
-        if (best_primitive_idx < 0) {
-            ROS_ERROR_THROTTLE(5, "Dubins: No valid path found! pidx=%d", best_primitive_idx);
-            return;
+        // 2. Calcolo Dubins (Logica pura)
+        int best_idx = -1;
+        dubinscurve_out curve;
+        dubins_shortest_path(start.x, start.y, start_theta, 
+                             goal_pos.x, goal_pos.y, goal_theta, 
+                             1.0/rho, best_idx, &curve);
+        
+        bool logic_valid = false;
+        if (best_idx >= 0) {
+            // 3. Verifica Collisioni sulla path (Collision Checker)
+            logic_valid = roadmap.is_dubins_path_valid(start, start_theta, goal_pos, goal_theta, rho);
         }
-        
-        ROS_INFO_THROTTLE(5, "Dubins: pidx=%d, Length=%.2f, a1.l=%.2f, a2.l=%.2f, a3.l=%.2f", 
-                         best_primitive_idx, (double)result_curve.L,
-                         (double)result_curve.a1.l, (double)result_curve.a2.l, (double)result_curve.a3.l);
-        
-        // 3. Visualizzazione
-        visualization_msgs::Marker path_marker;
-        path_marker.header.frame_id = "map";
-        path_marker.header.stamp = ros::Time::now();
-        path_marker.ns = "dubins_test_path";
-        path_marker.id = 666;
-        path_marker.type = visualization_msgs::Marker::LINE_STRIP;
-        path_marker.action = visualization_msgs::Marker::ADD;
-        path_marker.scale.x = 0.05; // Spessore linea
-        path_marker.color.r = 0.0; path_marker.color.g = 0.5; path_marker.color.b = 1.0; 
-        path_marker.color.a = 1.0;
-        path_marker.lifetime = ros::Duration(0);
 
-        // Campioniamo i 3 segmenti (LSL, RSR, etc sono composti da 3 archi: a1, a2, a3)
-        sampleAndAddToMarker(&result_curve.a1, path_marker);
-        sampleAndAddToMarker(&result_curve.a2, path_marker);
-        sampleAndAddToMarker(&result_curve.a3, path_marker);
+        // 4. Output Console (Brutale)
+        ROS_INFO_THROTTLE(2, "Verifica Logica: Path Dubins L=%.2f | Collision Free: %s", 
+                          (double)(best_idx >= 0 ? curve.L : -1.0), 
+                          logic_valid ? "SI" : "NO (COLLISIONE)");
 
-        visualization_msgs::MarkerArray marker_array;
-        marker_array.markers.push_back(path_marker);
-        pub_markers.publish(marker_array);
+        // 5. Visualizzazione Rviz
+        publishViz(curve, logic_valid);
+    }
+
+    // --- HELPER VISUALIZZAZIONE ---
+    
+    void publishViz(const dubinscurve_out& curve, bool is_valid) {
+        visualization_msgs::MarkerArray ma;
         
-        // Debug Log (una volta ogni tanto)
-        ROS_INFO_THROTTLE(5, "Dubins Path Calc. Length: %.2f", (double)result_curve.L);
+        // Marker Path Dubins
+        visualization_msgs::Marker path_m;
+        path_m.header.frame_id = "map";
+        path_m.header.stamp = ros::Time::now();
+        path_m.ns = "debug_path";
+        path_m.id = 0;
+        path_m.type = visualization_msgs::Marker::LINE_STRIP;
+        path_m.action = visualization_msgs::Marker::ADD;
+        path_m.scale.x = 0.05; 
+        
+        // Colore semaforico: Verde = OK, Rosso = Collisione
+        if (is_valid) { path_m.color.r=0.0; path_m.color.g=1.0; path_m.color.a=1.0; }
+        else          { path_m.color.r=1.0; path_m.color.g=0.0; path_m.color.a=1.0; }
+
+        // Campionamento path per visualizzazione
+        auto add_arc = [&](const dubinsarc_out& arc) {
+            double step = 0.1;
+            int n = std::ceil(arc.l / step);
+            for(int i=0; i<=n; i++) {
+                double s = std::min((double)arc.l, i*step);
+                long double x, y, th;
+                circline(s, arc.x0, arc.y0, arc.th0, arc.k, x, y, th);
+                geometry_msgs::Point p; p.x=x; p.y=y; ma.markers.push_back(path_m); // Fix scope
+                path_m.points.push_back(p);
+            }
+        };
+        add_arc(curve.a1); add_arc(curve.a2); add_arc(curve.a3);
+        ma.markers.push_back(path_m);
+
+        // Marker Ostacoli (Debug visuale di cosa vede la roadmap)
+        int id = 1;
+        for(const auto& obs : roadmap.obstacles.get_obstacles()) {
+            visualization_msgs::Marker m;
+            m.header.frame_id = "map"; m.ns = "debug_obs"; m.id = id++;
+            m.type = visualization_msgs::Marker::LINE_STRIP; m.scale.x = 0.05;
+            m.color.r = 1.0; m.color.a = 0.5;
+            for(const auto& p : obs.get_points()) {
+                geometry_msgs::Point gp; gp.x=p.x; gp.y=p.y;
+                m.points.push_back(gp);
+            }
+            if(!m.points.empty()) m.points.push_back(m.points[0]); // Chiudi loop
+            ma.markers.push_back(m);
+        }
+
+        pub_markers.publish(ma);
     }
 };
 
 int main(int argc, char** argv) {
     ros::init(argc, argv, "data_verifier");
-    DataVerifier verifier;
+    DataVerifierNode node;
     
-    // Loop principale
-    ros::Rate r(2); // 2 Hz
+    ros::Rate r(5); // 5 Hz
     while(ros::ok()) {
-        verifier.publishTestDubins(); // Esegue il test continuamente
         ros::spinOnce();
+        node.run_verification();
         r.sleep();
     }
     return 0;
