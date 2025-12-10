@@ -1,11 +1,11 @@
-#pragma once
+#ifndef MAP_DATA_STRUCTURES_H
+#define MAP_DATA_STRUCTURES_H
+
 #include <vector>
 #include <iostream> // for std::cout
 #include <iomanip>  // for std::setprecision
 
 #include "dubins_planner/collision_checker.h"
-#include "dubins_planner/dubins_trajectory.h"
-
 
 struct Point {
     double x;
@@ -21,15 +21,14 @@ struct Orientation {
 };
 
 
-
 // -------------- MapBorders -----------------
 // Bring all the vertices of the Map
-class MapBorders {
+class Borders {
 private:
     std::vector<Point> points;  // Vertex of the Poligonal Shape
 
 public:
-    MapBorders();
+    Borders();
 
     const std::vector<Point>& get_points() const;
 
@@ -48,6 +47,7 @@ private:
     Orientation orientation;
 
 public: 
+    Start(); 
     Start(const Point& position, const Orientation& orientation);
 
     const Point& get_position() const;
@@ -105,6 +105,9 @@ public:
     const std::vector<Point>& get_points() const;
     const float get_radius() const; 
 
+    // Get axis-aligned bounding box
+    void get_bounding_box(double& minX, double& minY, double& maxX, double& maxY) const; 
+
     std::string to_string() const;
 };
 
@@ -160,47 +163,23 @@ public:
 };
 
 
-// --------------- Complete roadmap ----------------
-class Roadmap {
+// --------------- Complete Map ----------------
+class Map {
 public:
-    MapBorders mapBorders;
+    Borders borders;
     Gates gates;
+    Start start; 
     Obstacles obstacles;
     Victims victims;
 
-    // Costruttore: Inizializza il checker
-    Roadmap(double robot_radius = 0.25, double safety_margin = 0.05);
+    Map();
 
-    // Metodo esistente
-    void paint_roadmap();
+    void plot(bool display, bool save, std::string output_path);
 
-    /**
-     * @brief Converte ostacoli e bordi nel formato ottimizzato per il CollisionChecker.
-     * Da chiamare UNA VOLTA dopo aver ricevuto tutti i messaggi ROS.
-     */
-    void update_collision_cache();
-
-    /**
-     * @brief Controlla se una singola configurazione (x,y) è valida (libera).
-     */
-    bool is_state_valid(double x, double y) const;
-
-    /**
-     * @brief Controlla se è possibile connettere A a B con una curva di Dubins valida.
-     * @param start Configurazione di partenza {x, y, theta}
-     * @param end Configurazione di arrivo {x, y, theta}
-     * @param rho Raggio minimo di curvatura (es. 0.5m)
-     * @return true se il percorso esiste ed è libero da collisioni.
-     */
-    bool is_dubins_path_valid(const Point& start, double start_theta, 
-                              const Point& end, double end_theta, 
-                              double rho) const;
-
-private:
-    // Motore di collisione
-    CollisionChecker collision_checker_;
-
-    // Cache ottimizzata (Poligoni e Cerchi pronti per il check)
-    std::vector<CircleObstacle> cached_circles_;
-    std::vector<PolygonObstacle> cached_polygons_;
+    // Get map bounding box
+    void get_bounding_box(double& minX, double& minY, double& maxX, double& maxY) const; 
 };
+
+
+
+#endif // MAP_DATA_STRUCTURES_H
