@@ -26,7 +26,7 @@ int main(int argc, char **argv)
         Map map = builder.buildMap();
         
         // Display the map
-        std::string output_map_file = "src/robot_planning/src/test/map.png";
+        std::string output_map_file = "src/robot_planning/src/combinatorial_planning/test/map.png";
         map.plot(false, true, output_map_file);
         
         ROS_INFO("=== Testing Different Algorithms ===");
@@ -45,7 +45,7 @@ int main(int argc, char **argv)
             ROS_INFO("[RoadmapTest] Visualizing roadmap...");
             
             // Display or save
-            std::string output_file = "src/robot_planning/src/test/ECD_roadmap_approx.png";
+            std::string output_file = "src/robot_planning/src/combinatorial_planning/test/ECD_roadmap_approx.png";
             ECD_roadmap->plot(false, true, output_file);
         }
         
@@ -63,7 +63,7 @@ int main(int argc, char **argv)
             ROS_INFO("[RoadmapTest] Visualizing roadmap...");
             
             // Display or save
-            std::string output_file = "src/robot_planning/src/test/ACD_roadmap_approx.png";
+            std::string output_file = "src/robot_planning/src/combinatorial_planning/test/ACD_roadmap_approx.png";
             ACD_roadmap->plot(false, true, output_file);
         }
         
@@ -81,7 +81,7 @@ int main(int argc, char **argv)
             ROS_INFO("[RoadmapTest] Visualizing roadmap...");
             
             // Display or save
-            std::string output_file = "src/robot_planning/src/test/MCR_roadmap_approx.png";
+            std::string output_file = "src/robot_planning/src/combinatorial_planning/test/MCR_roadmap_approx.png";
             MCR_roadmap->plot(false, true, output_file);
         }
         

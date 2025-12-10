@@ -201,7 +201,7 @@ target_link_libraries(data_verifier_node ${catkin_LIBRARIES} dubins_library)
 add_dependencies(data_verifier_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 # Test node
-add_executable(roadmap_test_node src/test/roadmap_test_node.cpp )
+add_executable(roadmap_test_node src/combinatorial_planning/roadmap_test_node.cpp )
 target_link_libraries(roadmap_test_node
   map_builder 
   exact_cell_decomposition
