@@ -79,13 +79,6 @@ private:
 
     // Pointer to the Map on which the Roadmap is created
     const Map* linkedMap;
-
-    // Motore di collisione
-    CollisionChecker collision_checker_;
-
-    // Cache ottimizzata (Poligoni e Cerchi pronti per il check)
-    std::vector<CircleObstacle> cached_circles_;
-    std::vector<PolygonObstacle> cached_polygons_;
     
     // Helper: check if edge is collision-free (placeholder)
     bool isEdgeValid(const Vertex& p1, const Vertex& p2) const;
@@ -122,28 +115,6 @@ public:
 
     // plot the Roadmap
     void plot(bool display, bool save, std::string output_path = "");
-
-     /**
-     * @brief Converte ostacoli e bordi nel formato ottimizzato per il CollisionChecker.
-     * Da chiamare UNA VOLTA dopo aver ricevuto tutti i messaggi ROS.
-     */
-    void update_collision_cache();
-
-    /**
-     * @brief Controlla se una singola configurazione (x,y) è valida (libera).
-     */
-    bool is_state_valid(double x, double y) const;
-
-    /**
-     * @brief Controlla se è possibile connettere A a B con una curva di Dubins valida.
-     * @param start Configurazione di partenza {x, y, theta}
-     * @param end Configurazione di arrivo {x, y, theta}
-     * @param rho Raggio minimo di curvatura (es. 0.5m)
-     * @return true se il percorso esiste ed è libero da collisioni.
-     */
-    bool is_dubins_path_valid(const Point& start, double start_theta, 
-                              const Point& end, double end_theta, 
-                              double rho) const;
 };
 
 #endif // ROADMAP_H

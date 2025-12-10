@@ -1,9 +1,17 @@
-#pragma once
+#ifndef COLLISION_CHECKER_H
+#define COLLISION_CHECKER_H
 
 #include <vector>
 #include <cmath>
 #include <algorithm>
 #include <stdexcept>
+
+// MERGE CHANGE: 
+/* Added the new datastructure of the Map. It is necessary becouse since the Collision Checker
+is not more inside the Roadmap, it neet to take somewhere the obstacle information. This information
+are taken from an Map instance */
+#include "map/map_data_structures.h"
+#include "dubins_planner/dubins_trajectory.h"
 
 // --- Strutture Dati di Base ---
 
@@ -29,7 +37,6 @@ struct PolygonObstacle {
 
 
 // --- Classe Collision Checker ---
-
 class CollisionChecker {
 public:
     /**
@@ -47,15 +54,58 @@ public:
      * @param polygons Lista degli ostacoli poligonali correnti (con dati broad phase precalcolati).
      * @return true se in collisione, false altrimenti.
      */
-    [[nodiscard]] bool check(const Point2D& robot_pose, 
-                             const std::vector<CircleObstacle>& circles,
-                             const std::vector<PolygonObstacle>& polygons) const;
+    // MERGE CHANGE 
+    // Since now the cache of cached_circles_ , cached_polygons_ are attribute of the calss they no more need 
+    // to be passed as parameters
+    // [[nodiscard]] bool check(const Point2D& robot_pose, 
+    //                         const std::vector<CircleObstacle>& circles,
+    //                         const std::vector<PolygonObstacle>& polygons) const;
+    [[nodiscard]] bool check(const Point2D& robot_pose) const;
+    
 
+    // MERGE CHANGED
+    /* Since the checker now is an indipended entity i suppose that the best location for the check method 
+    was inside the Cecher Class */
+
+    /**
+     * @brief Converte ostacoli e bordi nel formato ottimizzato per il CollisionChecker.
+     * Da chiamare UNA VOLTA dopo aver ricevuto tutti i messaggi ROS.
+     */
+    void update_collision_cache(const Map& map);
+
+    /**
+     * @brief Controlla se una singola configurazione (x,y) è valida (libera).
+     */
+    bool is_state_valid(double x, double y) const;
+
+    // MERGE CHANGED
+    // Insted to pass al the parameter to recompute the curve, we pass directly the curve with reference
+    /**
+     * @brief Controlla se è possibile connettere A a B con una curva di Dubins valida.
+     * @param start Configurazione di partenza {x, y, theta}
+     * @param end Configurazione di arrivo {x, y, theta}
+     * @param rho Raggio minimo di curvatura (es. 0.5m)
+     * @return true se il percorso esiste ed è libero da collisioni.
+     */
+    // bool is_dubins_path_valid(const Point& start, double start_theta, 
+    //                          const Point& end, double end_theta, 
+    //                          double rho) const;
+    bool is_dubins_path_valid(const int best_word, const dubinscurve_out& curve) const;
+
+    
 private:
     // Il raggio totale effettivo (robot + margine)
     double effective_robot_radius_;
     // Il quadrato del raggio effettivo (per ottimizzazione confronti)
     double effective_radius_sq_;
+
+    // MERGE CHANGED
+    /* Since the checker now is an indipended entity i suppose that the best location for the cached of
+    the obstacle was inside it. It not add new element, only move this two cache from Roadmap in Collision
+    Checker  */
+    // Cache ottimizzata (Poligoni e Cerchi pronti per il check)
+    std::vector<CircleObstacle> cached_circles_;
+    std::vector<PolygonObstacle> cached_polygons_;
 
     // --- Funzioni Helper Private ---
 
@@ -73,3 +123,5 @@ private:
     // Verifica collisione con un singolo poligono usando la strategia ibrida.
     bool checkSinglePolygon(const Point2D& robot_pose, const PolygonObstacle& poly) const;
 };
+
+#endif 
