@@ -2,8 +2,8 @@
 <launch>
 
 	<!-- input Parameters -->
-    <arg name="use_gui" default="true" />
-    <arg name="use_rviz" default="true" />
+    <arg name="use_gui" default="false" />
+    <arg name="use_rviz" default="false" />
 
     <arg name="victims_activated" default="true" />
     <arg name="generate_new_config" default="true" />
