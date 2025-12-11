@@ -16,6 +16,8 @@ find_package(catkin REQUIRED COMPONENTS
   nav_msgs
 )
 
+
+find_package(Boost REQUIRED)
 find_package(OpenCV REQUIRED)
 
 catkin_package(
@@ -32,6 +34,7 @@ include_directories(
   include
   ${catkin_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
+  ${Boost_INCLUDE_DIRS}
 )
 
 # ==============================================================================
@@ -90,8 +93,8 @@ target_link_libraries(approximate_cell_decomposition
 )
 
 target_link_libraries(maximum_clearance_roadmap 
-  planning_utils
-  roadmap_data_structures  # <--- ADD THIS
+  map_data_structures
+  roadmap_data_structures
 )
 
 # ==============================================================================
@@ -110,8 +113,8 @@ target_link_libraries(data_verifier_node
 add_dependencies(data_verifier_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 # Test node
-add_executable(roadmap_test_node src/combinatorial_planning/roadmap_test_node.cpp )
-target_link_libraries(roadmap_test_node
+add_executable(combinatorial_test_node src/combinatorial_planning/combinatorial_test_node.cpp )
+target_link_libraries(combinatorial_test_node
   map_builder 
   exact_cell_decomposition
   approximate_cell_decomposition
@@ -119,7 +122,7 @@ target_link_libraries(roadmap_test_node
   roadmap_data_structures  # <--- ADD THIS
   ${catkin_LIBRARIES}
 )
-add_dependencies(roadmap_test_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(combinatorial_test_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the

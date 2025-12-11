@@ -1,23 +1,16 @@
-#ifndef MAXIMUM_CLEARANCE_ROADMAP_H
-#define MAXIMUM_CLEARANCE_ROADMAP_H
+#ifndef ROADMAP_GENERATOR_H
+#define ROADMAP_GENERATOR_H
 
-#include <vector>
-#include <memory>
-#include <map/map_data_structures.h>
-#include <roadmap/roadmap_data_structures.h>
-#include "planning_utils.h"
+#include "map/map_data_structures.h"
+#include "roadmap/roadmap_data_structures.h"
 
-namespace MaxClearanceRoadmap {
+/**
+ * @brief Generates a Maximum Clearance Roadmap (Medial Axis) using the Voronoi Diagram.
+ * * Uses the Boost.Polygon library (Line Sweep Algorithm) internally to compute 
+ * the Voronoi diagram of the map borders and obstacles.
+ * * @param map Pointer or reference to the loaded Map.
+ * @return Roadmap A populated Roadmap structure containing the graph.
+ */
+Roadmap generateMaxClearanceRoadmap(const Map& map);
 
-    // Main Function: Creates paths that maximize distance from obstacles (Voronoi-based)
-    std::shared_ptr<Roadmap> maximumClearanceRoadmap(
-        const Map& map,
-        double gridResolution = 0.5
-    );
-
-    // --- Helper Functions ---
-
-
-}
-
-#endif // MAXIMUM_CLEARANCE_ROADMAP_H
+#endif // ROADMAP_GENERATOR_H

@@ -67,24 +67,29 @@ int main(int argc, char **argv)
             ACD_roadmap->plot(false, true, output_file);
         }
         
-        // Test 3: Approximate Cell Decomposition (different grid sizes)
+        // Test 3: Maximum Clearance Roadmap (Voronoi)
         {
-            ROS_INFO("\n--- Test 3: Approximate Cell Decomposition");
-            std::shared_ptr<Roadmap> MCR_roadmap; 
-            MCR_roadmap = MaxClearanceRoadmap::maximumClearanceRoadmap(map);
-
-            if (!MCR_roadmap) {
-                ROS_WARN("[RoadmapTest] Cannot visualize null roadmap");
-                return 1;
+            ROS_INFO("\n--- Test 3: Maximum Clearance Roadmap ---");
+            
+            // 1. Generate roadmap using the new function
+            Roadmap MCR_roadmap = generateMaxClearanceRoadmap(map);
+            
+            // 2. Check if roadmap has vertices
+            if (MCR_roadmap.getNumVertices() == 0) {
+                ROS_WARN("[RoadmapTest] Roadmap has no vertices. Check map bounds or obstacle density.");
+            } else {
+                ROS_INFO("[RoadmapTest] Visualizing roadmap with %d vertices...", 
+                        MCR_roadmap.getNumVertices());
+                
+                // 3. Display or save
+                std::string output_file = "src/robot_planning/src/combinatorial_planning/test/MCR_roadmap_approx.png";
+                
+                // plot(display, save, path)
+                MCR_roadmap.plot(false, true, output_file);
+                ROS_INFO("[RoadmapTest] Saved roadmap to: %s", output_file.c_str());
             }
-            
-            ROS_INFO("[RoadmapTest] Visualizing roadmap...");
-            
-            // Display or save
-            std::string output_file = "src/robot_planning/src/combinatorial_planning/test/MCR_roadmap_approx.png";
-            MCR_roadmap->plot(false, true, output_file);
         }
-        
+                
         ROS_INFO("\n=== All Tests Complete ===");
         ROS_INFO("Check generated PNG files for visualization results");
         
