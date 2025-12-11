@@ -38,11 +38,31 @@ int Roadmap::addVertex(const Vertex& p) {
 
 // Add an edge (optionally bidirectional)
 void Roadmap::addEdge(int from, int to, bool bidirectional){
+
     if (from >= vertices.size() || to >= vertices.size()) return;
     
     double weight = vertices[from].distance(vertices[to]);
     adjacencyList[from].push_back(Edge(to, weight));
     
+    if (bidirectional) {
+        adjacencyList[to].push_back(Edge(from, weight));
+    }
+}
+
+// NUOVO OVERLOAD per sample_based planning: Aggiunge un arco con un peso esplicito (es. lunghezza Dubins)
+void Roadmap::addEdge(int from, int to, double weight, bool bidirectional) {
+    // 1. Controllo di sicurezza sugli indici
+    if (from < 0 || from >= vertices.size() || to < 0 || to >= vertices.size()) {
+        // Opzionale: stampa un errore ROS_ERROR o std::cerr
+        return;
+    }
+    
+    // 2. Aggiungi l'arco diretto (from -> to) con il peso fornito
+    adjacencyList[from].push_back(Edge(to, weight));
+    
+    // 3. Gestione opzionale bidirezionalità
+    // NOTA: Per i robot non-olonomi (Dubins), 'bidirectional' dovrebbe essere quasi sempre 'false'
+    // perché il costo per andare da A a B è diverso da quello per andare da B ad A.
     if (bidirectional) {
         adjacencyList[to].push_back(Edge(from, weight));
     }

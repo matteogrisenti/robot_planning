@@ -100,6 +100,9 @@ public:
     // Add an edge (optionally bidirectional)
     void addEdge(int from, int to, bool bidirectional = true);
 
+    // NUOVO: Add an edge with a specific weight (overload for sample based motion planning)
+    void addEdge(int from, int to, double weight, bool bidirectional = false);
+
     // Methods to handle the Map pointer
     void setMap(const Map* map_ptr);
     const Map* getMap() const;
