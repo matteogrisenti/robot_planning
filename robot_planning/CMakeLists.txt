@@ -82,6 +82,7 @@ add_library(planning_utils src/combinatorial_planning/planning_utils.cpp)
 add_library(exact_cell_decomposition src/combinatorial_planning/exact_cell_decomposition.cpp)
 add_library(approximate_cell_decomposition src/combinatorial_planning/approximate_cell_decomposition.cpp)
 add_library(maximum_clearance_roadmap src/combinatorial_planning/maximum_clearance_roadmap.cpp)
+add_library(shortest_path_roadmap src/combinatorial_planning/shortest_path_roadmap.cpp)
 target_link_libraries(exact_cell_decomposition 
   planning_utils
   roadmap_data_structures  # <--- ADD THIS
@@ -93,6 +94,11 @@ target_link_libraries(approximate_cell_decomposition
 )
 
 target_link_libraries(maximum_clearance_roadmap 
+  map_data_structures
+  roadmap_data_structures
+)
+
+target_link_libraries(shortest_path_roadmap 
   map_data_structures
   roadmap_data_structures
 )
@@ -119,6 +125,7 @@ target_link_libraries(combinatorial_test_node
   exact_cell_decomposition
   approximate_cell_decomposition
   maximum_clearance_roadmap
+  shortest_path_roadmap
   roadmap_data_structures  # <--- ADD THIS
   ${catkin_LIBRARIES}
 )

@@ -5,6 +5,7 @@
 #include "combinatorial_planning/exact_cell_decomposition.h"
 #include "combinatorial_planning/approximate_cell_decomposition.h"
 #include "combinatorial_planning/maximum_clearance_roadmap.h"
+#include "combinatorial_planning/shortest_path_roadmap.h"
 
 /**
  * @brief Test node for experimenting with different roadmap algorithms
@@ -86,6 +87,28 @@ int main(int argc, char **argv)
                 
                 // plot(display, save, path)
                 MCR_roadmap.plot(false, true, output_file);
+                ROS_INFO("[RoadmapTest] Saved roadmap to: %s", output_file.c_str());
+            }
+        }
+
+        // Test 4: Shortest Path Roadmap
+        {
+            ROS_INFO("\n--- Test 4: Shortest Path Roadmap ---");
+            
+            // 1. Generate roadmap using the new function
+            Roadmap SP_roadmap = generateShortestPathRoadmap(map);
+            // 2. Check if roadmap has vertices
+            if (SP_roadmap.getNumVertices() == 0) {
+                ROS_WARN("[RoadmapTest] Roadmap has no vertices. Check map bounds or obstacle density.");
+            } else {
+                ROS_INFO("[RoadmapTest] Visualizing roadmap with %d vertices...", 
+                        SP_roadmap.getNumVertices());
+                
+                // 3. Display or save
+                std::string output_file = "src/robot_planning/src/combinatorial_planning/test/SP_roadmap_approx.png";
+                
+                // plot(display, save, path)
+                SP_roadmap.plot(false, true, output_file);
                 ROS_INFO("[RoadmapTest] Saved roadmap to: %s", output_file.c_str());
             }
         }
