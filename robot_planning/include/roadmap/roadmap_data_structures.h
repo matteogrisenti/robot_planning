@@ -110,6 +110,8 @@ public:
     // NUOVO OVERLOAD: Per PRM con peso esplicito e tipo Dubins
     void addEdge(int from, int to, double weight, bool bidirectional, int dubinsType);
 
+    bool removeEdge(int from, int to, bool bidirectional = true);
+
     void setMap(const Map* map_ptr);
     const Map* getMap() const;
     

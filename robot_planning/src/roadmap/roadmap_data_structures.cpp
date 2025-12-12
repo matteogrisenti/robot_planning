@@ -49,6 +49,37 @@ void Roadmap::addEdge(int from, int to, double weight, bool bidirectional, int d
     }
 }
 
+bool Roadmap::removeEdge(int from, int to, bool bidirectional) {
+    if (from < 0 || from >= vertices.size() || to < 0 || to >= vertices.size()) {
+        return false;
+    }
+
+    bool found = false;
+
+    // 1. Rimuovi arco from -> to
+    auto& edgesFrom = adjacencyList[from];
+    auto it = std::remove_if(edgesFrom.begin(), edgesFrom.end(), 
+                             [to](const Edge& e){ return e.targetVertex == to; });
+    
+    if (it != edgesFrom.end()) {
+        edgesFrom.erase(it, edgesFrom.end());
+        found = true;
+    }
+
+    // 2. Rimuovi arco to -> from (se bidirezionale)
+    if (bidirectional) {
+        auto& edgesTo = adjacencyList[to];
+        auto it2 = std::remove_if(edgesTo.begin(), edgesTo.end(), 
+                                  [from](const Edge& e){ return e.targetVertex == from; });
+        if (it2 != edgesTo.end()) {
+            edgesTo.erase(it2, edgesTo.end());
+            found = true; // Consideriamo successo se ne troviamo almeno uno
+        }
+    }
+
+    return found;
+}
+
 void Roadmap::setMap(const Map* map_ptr) { this->linkedMap = map_ptr; }
 const Map* Roadmap::getMap() const { return this->linkedMap; }
 
