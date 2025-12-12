@@ -122,23 +122,17 @@ target_link_libraries(roadmap_test_node
 add_dependencies(roadmap_test_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 # --- Sampling Planning Test Node ---
-add_executable(sampling_planning_test_node
-    src/combinatorial_planning/planning_utils.cpp
+add_executable(sampling_planning_test_node 
     src/sample_based_planning/sampling_planning_test_node.cpp
-    
-    # Core Logic
     src/sample_based_planning/prm.cpp
-    
-    # Dependencies (Collision & Dubins)
-    src/collision_checker.cpp
-    src/dubins_trajectory.cpp
-    
-    # Infrastructure
+    src/sample_based_planning/rrt.cpp
+    src/sample_based_planning/rrt_star.cpp
     src/map/map_builder.cpp
     src/map/map_data_structures.cpp
     src/map/map_visualization.cpp
     src/roadmap/roadmap_data_structures.cpp
     src/roadmap/roadmap_visualization.cpp
+    src/combinatorial_planning/planning_utils.cpp
 )
 
 target_link_libraries(sampling_planning_test_node

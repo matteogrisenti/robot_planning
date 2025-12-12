@@ -1,137 +1,106 @@
 #include "sample_based_planning/prm.h"
-#include "combinatorial_planning/planning_utils.h" // NECESSARIO per pointInPolygon
+#include "combinatorial_planning/planning_utils.h"
+#include <random>
 #include <iostream>
-#include <cmath>
 #include <ros/ros.h>
 
-namespace SampleBasedPlanning {
+namespace sample_planning {
 
-PRMPlanner::PRMPlanner(int num_samples, double connection_radius, double rho, double robot_radius)
-    : num_samples_(num_samples), connection_radius_(connection_radius), rho_(rho), robot_radius_(robot_radius) 
-{
-    std::random_device rd;
-    rng_ = std::mt19937(rd());
-}
+    // Helper: Check if a point is valid (Inside borders, Outside obstacles)
+    bool isConfigurationFree(const Vertex& p, const Map& map) {
+        // 1. Check Borders (Must be inside)
+        std::vector<Vertex> borderPoly;
+        for(const auto& bp : map.borders.get_points()) {
+            borderPoly.push_back(Vertex(bp.x, bp.y));
+        }
+        if (!PlanningUtils::pointInPolygon(p, borderPoly)) return false;
 
-std::shared_ptr<Roadmap> PRMPlanner::buildRoadmap(const Map& map) {
-    auto roadmap = std::make_shared<Roadmap>();
-    roadmap->setMap(&map);
+        // 2. Check Obstacles (Must be outside)
+        if (PlanningUtils::pointInAnyObstacle(p, map.obstacles.get_obstacles())) return false;
 
-    // 1. Setup Collision Checker
-    CollisionChecker checker(robot_radius_);
-    checker.update_collision_cache(map);
-
-    // 2. Aggiungi Start, Gate, Vittime
-    addPointsOfInterest(*roadmap, map, checker);
-
-    // 3. Campiona (Ora con controllo Bordi!)
-    sampleFreeSpace(*roadmap, map, checker);
-
-    // 4. Connetti usando Dubins
-    connectNodes(*roadmap, checker);
-
-    return roadmap;
-}
-
-void PRMPlanner::addPointsOfInterest(Roadmap& roadmap, const Map& map, const CollisionChecker& checker) {
-    // START
-    const auto& s = map.start;
-    double theta_start = 2.0 * std::atan2(s.get_orientation().z, s.get_orientation().w);
-    
-    if (checker.is_state_valid(s.get_position().x, s.get_position().y)) {
-        roadmap.addVertex(Vertex(s.get_position().x, s.get_position().y, theta_start));
+        return true;
     }
 
-    // VITTIME (4 orientamenti)
-    for (const auto& v : map.victims.get_victims()) {
-        if (checker.is_state_valid(v.get_center().x, v.get_center().y)) {
-            for (double th = 0; th < 2*M_PI; th += M_PI/2.0) {
-                roadmap.addVertex(Vertex(v.get_center().x, v.get_center().y, th));
+    std::shared_ptr<Roadmap> buildPRM(const Map& map, const PRMConfig& config) {
+        auto roadmap = std::make_shared<Roadmap>();
+        roadmap->setMap(&map);
+
+        ROS_INFO("[PRM] Starting construction with N=%d, K=%d", config.num_samples, config.k_neighbors);
+
+        // --- PHASE 1: SAMPLING ---
+        // Slide lines 1-6
+        
+        // 1. Determine Sampling Bounds
+        double minX, minY, maxX, maxY;
+        map.get_bounding_box(minX, minY, maxX, maxY);
+        
+        // Random Number Generation setup
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_real_distribution<> disX(minX, maxX);
+        std::uniform_real_distribution<> disY(minY, maxY);
+
+        int samples_added = 0;
+        int max_attempts = config.num_samples * 100; // Safety break
+        int attempts = 0;
+
+        while (samples_added < config.num_samples && attempts < max_attempts) {
+            attempts++;
+            
+            // 2. Generate Sample (q_rand)
+            Vertex q(disX(gen), disY(gen));
+
+            // 3. Check Validity (CLEAR(q))
+            if (isConfigurationFree(q, map)) {
+                roadmap->addVertex(q);
+                samples_added++;
             }
         }
-    }
-    
-    // GATE
-    for (const auto& g : map.gates.get_gates()) {
-        double theta_gate = 2.0 * std::atan2(g.get_orientation().z, g.get_orientation().w);
-        if (checker.is_state_valid(g.get_position().x, g.get_position().y)) {
-            roadmap.addVertex(Vertex(g.get_position().x, g.get_position().y, theta_gate));
-        }
-    }
-}
 
-void PRMPlanner::sampleFreeSpace(Roadmap& roadmap, const Map& map, const CollisionChecker& checker) {
-    double minX, minY, maxX, maxY;
-    map.get_bounding_box(minX, minY, maxX, maxY);
-    
-    // Convertiamo i bordi della mappa in un formato usabile da PlanningUtils
-    std::vector<Vertex> border_polygon;
-    for(const auto& p : map.borders.get_points()) {
-        border_polygon.emplace_back(p.x, p.y);
-    }
-
-    std::uniform_real_distribution<double> dist_x(minX, maxX);
-    std::uniform_real_distribution<double> dist_y(minY, maxY);
-    std::uniform_real_distribution<double> dist_th(-M_PI, M_PI);
-
-    int count = 0;
-    int attempts = 0;
-    // Timeout di sicurezza per evitare loop infiniti se la mappa è piena
-    int max_attempts = num_samples_ * 200; 
-
-    while(count < num_samples_ && attempts < max_attempts) {
-        attempts++;
-        double x = dist_x(rng_);
-        double y = dist_y(rng_);
-        Vertex v_sample(x, y);
-
-        // CHECK 1: Il punto deve essere DENTRO i bordi della mappa (Esagono)
-        if (!PlanningUtils::pointInPolygon(v_sample, border_polygon)) {
-            continue; 
+        if (samples_added < config.num_samples) {
+            ROS_WARN("[PRM] Could only sample %d/%d valid points within bounding box.", 
+                     samples_added, config.num_samples);
         }
 
-        // CHECK 2: Il punto deve essere LONTANO dagli ostacoli
-        if (checker.is_state_valid(x, y)) {
-            roadmap.addVertex(Vertex(x, y, dist_th(rng_)));
-            count++;
-        }
-    }
-    
-    if (count < num_samples_) {
-        ROS_WARN("[PRM] Generated only %d/%d samples. Map might be crowded.", count, num_samples_);
-    }
-}
+        // --- PHASE 2: CONNECTING ---
+        // Slide lines 7-17
 
-void PRMPlanner::connectNodes(Roadmap& roadmap, const CollisionChecker& checker) {
-    int n = roadmap.getNumVertices();
-    long double k_max = (long double)(1.0 / rho_);
+        int num_vertices = roadmap->getNumVertices();
+        int edges_added = 0;
 
-    for (int i = 0; i < n; ++i) {
-        const Vertex& v1 = roadmap.getVertex(i);
-        auto neighbors = roadmap.getNearestNeighbors(i, connection_radius_);
+        for (int i = 0; i < num_vertices; ++i) {
+            const Vertex& q = roadmap->getVertex(i);
 
-        for (int j : neighbors) {
-            const Vertex& v2 = roadmap.getVertex(j);
+            // 1. Find Neighbors (KNEAR)
+            // Using the existing helper in Roadmap
+            std::vector<int> neighbors = roadmap->findKNearestNeighbors(i, config.k_neighbors);
 
-            dubinscurve_out curve;
-            int best_word = -1;
+            for (int neighbor_idx : neighbors) {
+                // Avoid self-loops and duplicate checks (check only if i < neighbor_idx for undirected)
+                if (i >= neighbor_idx) continue;
 
-            dubins_shortest_path(
-                (long double)v1.x, (long double)v1.y, (long double)v1.theta,
-                (long double)v2.x, (long double)v2.y, (long double)v2.theta,
-                k_max, best_word, &curve
-            );
+                const Vertex& q_near = roadmap->getVertex(neighbor_idx);
 
-            if (best_word >= 0) {
-                // Controllo collisioni accurato lungo la curva
-                if (checker.is_dubins_path_valid(best_word, curve)) {
-                    // Nota: Anche se l'arco è valido, il visualizzatore disegnerà una retta.
-                    // Se la retta passa sull'ostacolo ma la curva no, è normale.
-                    roadmap.addEdge(i, j, (double)curve.L, false, best_word);
+                // Optional: Check max connection distance (not strictly in slide, but good practice)
+                if (config.max_connection_dist > 0 && q.distance(q_near) > config.max_connection_dist) {
+                    continue;
+                }
+
+                // 2. Local Planner / Collision Check (PATH & COLLISION)
+                // We assume a straight line local planner.
+                // Using PlanningUtils to check line segment collision.
+                if (!PlanningUtils::lineSegmentIntersectsObstacle(q, q_near, map.obstacles.get_obstacles())) {
+                    
+                    // 3. Add Edge
+                    // Weight is Euclidean distance (calculated automatically by addEdge overload #1)
+                    roadmap->addEdge(i, neighbor_idx, true);
+                    edges_added++;
                 }
             }
         }
-    }
-}
 
-} // namespace
+        ROS_INFO("[PRM] Construction complete. Vertices: %d, Edges: %d", samples_added, edges_added);
+        return roadmap;
+    }
+
+}

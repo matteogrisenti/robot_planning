@@ -1,36 +1,26 @@
-#ifndef PROBABILISTIC_ROADMAP_H
-#define PROBABILISTIC_ROADMAP_H
+#ifndef PRM_H
+#define PRM_H
 
-#include <vector>
 #include <memory>
-#include <random>
+#include <map/map_data_structures.h>
+#include <roadmap/roadmap_data_structures.h>
 
-#include "map/map_data_structures.h"
-#include "roadmap/roadmap_data_structures.h"
-// Includiamo le tue librerie esistenti
-#include "dubins_planner/collision_checker.h" 
-#include "dubins_planner/dubins_trajectory.h"
+namespace sample_planning {
 
-namespace SampleBasedPlanning {
+    struct PRMConfig {
+        int num_samples = 500;      // N nella slide
+        int k_neighbors = 10;       // K nella slide
+        double max_connection_dist = -1.0; // Opzionale: limita la lunghezza massima degli edge
+    };
 
-class PRMPlanner {
-public:
-    PRMPlanner(int num_samples, double connection_radius, double rho, double robot_radius);
+    /**
+     * @brief Builds a Probabilistic Roadmap (PRM)
+     * * Implements the standard algorithm:
+     * 1. Sampling Phase: Uniform random sampling in C_free
+     * 2. Connection Phase: Connects each node to K-nearest neighbors if collision-free
+     */
+    std::shared_ptr<Roadmap> buildPRM(const Map& map, const PRMConfig& config);
 
-    std::shared_ptr<Roadmap> buildRoadmap(const Map& map);
+}
 
-private:
-    int num_samples_;
-    double connection_radius_;
-    double rho_; // Raggio minimo di sterzata
-    double robot_radius_;
-
-    std::mt19937 rng_;
-
-    void addPointsOfInterest(Roadmap& roadmap, const Map& map, const CollisionChecker& checker);
-    void sampleFreeSpace(Roadmap& roadmap, const Map& map, const CollisionChecker& checker);
-    void connectNodes(Roadmap& roadmap, const CollisionChecker& checker);
-};
-
-} 
-#endif
+#endif // PRM_H

@@ -1,98 +1,124 @@
 #include <ros/ros.h>
 #include <memory>
 #include <string>
-#include <vector>
 
-// Map Builder
+// Include Map & Roadmap Infrastructure
 #include "map/map_builder.h"
+#include "map/map_data_structures.h"
+#include "roadmap/roadmap_data_structures.h"
 
-// Algoritmi Sample Based
+// Include Sample-Based Algorithms
 #include "sample_based_planning/prm.h"
+#include "sample_based_planning/rrt.h"
+#include "sample_based_planning/rrt_star.h"
 
-/**
- * @brief Nodo di test per algoritmi di Sample-Based Planning (PRM, RRT, RRT*)
- * * Carica la mappa e genera roadmaps basate su campionamento e curve di Dubins.
- * Salva i risultati come immagini PNG.
- */
+// TODO implemnt path smoothing 
+
 int main(int argc, char **argv)
 {
-    ros::init(argc, argv, "sampling_planning_test_node");
+    // 1. ROS Initialization
+    ros::init(argc, argv, "sample_planning_test_node");
     ros::NodeHandle nh;
-    
-    ROS_INFO("=== Sampling Planning Test Node Started ===");
-    
+
+    ROS_INFO("=== Sample-Based Planning Test Node Started ===");
+
     try {
-        // --------------------------------------------------------
-        // 1. Costruzione Mappa (Broadcasting dei dati dell'ambiente)
-        // --------------------------------------------------------
-        ROS_INFO("Building map...");
-        // Timeout di 10s per essere sicuri di ricevere ostacoli e bordi
+        // ---------------------------------------------------------
+        // A. BUILD ENVIRONMENT (Map)
+        // ---------------------------------------------------------
+        ROS_INFO("1. Waiting for Map Data...");
+        // Timeout 10s. Assicurati che la simulazione stia pubblicando i topic!
         map_builder::MapBuilder builder(nh, 100.0); 
         Map map = builder.buildMap();
         
-        // Plot della mappa "pulita" per riferimento
-        // Nota: Assicurati che la cartella di output esista
-        std::string output_base_path = "src/robot_planning/robot_planning/src/sample_based_planning/test/";
-        std::string map_file = output_base_path + "map.png";
-        
-        ROS_INFO("Saving base map to: %s", map_file.c_str());
-        map.plot(false, true, map_file);
-        
-        ROS_INFO("=== Testing Algorithms ===");
-        
-        // --------------------------------------------------------
-        // TEST 1: Probabilistic Roadmap (PRM)
-        // --------------------------------------------------------
+        // Define base output directory for tests
+        // NOTE: Assicurati che questa cartella esista o creala con mkdir -p
+        std::string image_output_dir = "src/robot_planning/robot_planning/src/sample_based_planning/test/map.png";
+        ROS_INFO("Map built successfully. Saving base map image...");
+        map.plot(false, true, image_output_dir);
+
+        // ---------------------------------------------------------
+        // B. TEST 1: PROBABILISTIC ROADMAP (PRM)
+        // ---------------------------------------------------------
         {
-            ROS_INFO("\n--- Test 1: Probabilistic Roadmap (PRM) ---");
-            
-            // --- Parametri di Configurazione ---
-            int num_samples = 500;       // Numero di nodi da campionare
-            double connection_rad = 5.0; // Raggio max per tentare connessione (Euclideo)
-            double rho = 1.0;            // Raggio minimo di curvatura (Dubins) -> Kmax = 1.0
-            double robot_rad = 0.25;     // Raggio robot + margine sicurezza
-            
-            ROS_INFO("Parameters: Samples=%d, ConnRadius=%.2f, Rho=%.2f, RobotRadius=%.2f", 
-                     num_samples, connection_rad, rho, robot_rad);
+            ROS_INFO("\n--- Running Algorithm: PRM ---");
 
-            // Istanziazione Planner
-            SampleBasedPlanning::PRMPlanner prm(num_samples, connection_rad, rho, robot_rad);
+            // 1. Configuration
+            sample_planning::PRMConfig config;
+            config.num_samples = 1000;   // Aumenta se la mappa è grande
+            config.k_neighbors = 10;    // Connettività locale
+            config.max_connection_dist = -1.0; // Illimitato, o metti valore in metri (es. 5.0)
 
-            // Esecuzione e Timing
-            auto start = ros::Time::now();
-            std::shared_ptr<Roadmap> prm_roadmap = prm.buildRoadmap(map);
-            auto end = ros::Time::now();
-            
-            if (prm_roadmap) {
-                double duration = (end - start).toSec();
-                ROS_INFO("[PRM] Roadmap generated in %.4f seconds", duration);
-                ROS_INFO("[PRM] Total Vertices: %d", prm_roadmap->getNumVertices());
+            // 2. Execution
+            std::shared_ptr<Roadmap> prm_roadmap = sample_planning::buildPRM(map, config);
+
+            // 3. Visualization & Output
+            if (prm_roadmap && prm_roadmap->getNumVertices() > 0) {
+                std::string output_file = "src/robot_planning/robot_planning/src/sample_based_planning/test/prm.png";
+                ROS_INFO("PRM generated with %d vertices. Saving to: %s", 
+                         prm_roadmap->getNumVertices(), output_file.c_str());
                 
-                // Visualizzazione
-                std::string output_file = output_base_path + "PRM_roadmap_approx.png";
-                ROS_INFO("[PRM] Saving visualization to: %s", output_file.c_str());
+                // plot(display=false, save=true, filename)
                 prm_roadmap->plot(false, true, output_file);
             } else {
-                ROS_WARN("[PRM] Failed to generate roadmap (null pointer returned).");
+                ROS_WARN("PRM failed to generate a valid roadmap (0 vertices). Check bounds or obstacles.");
+            }
+        }
+
+        // ---------------------------------------------------------
+        // TEST RRT
+        // ---------------------------------------------------------
+{
+            ROS_INFO("\n--- Running Algorithm: RRT ---");
+            sample_planning::RRTConfig config;
+            config.max_iterations = 2000; 
+            config.step_size = 1.0;       
+            
+            // Setup Goal (Opzionale: usiamo il primo gate se c'è)
+            if (!map.gates.get_gates().empty()) {
+                Point g = map.gates.get_gates()[0].get_position();
+                config.goal_point = Vertex(g.x, g.y);
+                config.stop_at_goal = false; // Mettiamo false per vedere l'albero espandersi ovunque
+                config.goal_bias = 0.1;
+            }
+
+            auto rrt = sample_planning::buildRRT(map, config);
+            if (rrt) {
+                // Visualizza
+                std::string output_file = "src/robot_planning/robot_planning/src/sample_based_planning/test/rrt.png";
+                rrt->plot(false, true, output_file);
+            }
+        }
+
+        // ---------------------------------------------------------
+        // TEST RRT*
+        // ---------------------------------------------------------
+{
+            ROS_INFO("\n--- Running Algorithm: RRT* ---");
+            sample_planning::RRTStarConfig config;
+            config.max_iterations = 2000;
+            config.step_size = 1.0;
+            config.search_radius = 2.0; // Raggio di rewiring
+
+            // Opzionale: Setup Goal
+            if (!map.gates.get_gates().empty()) {
+                Point g = map.gates.get_gates()[0].get_position();
+                config.goal_point = Vertex(g.x, g.y);
+                config.stop_at_goal = false; // Lascia false per vedere l'ottimizzazione globale
+            }
+
+            auto rrt_star = sample_planning::buildRRTStar(map, config);
+            if (rrt_star) {
+                std::string output_file = "src/robot_planning/robot_planning/src/sample_based_planning/test/rrt_star.png";
+                rrt_star->plot(false, true, output_file);
             }
         }
         
-        // --------------------------------------------------------
-        // TEST 2: RRT (Placeholder per implementazione futura)
-        // --------------------------------------------------------
-        /*
-        {
-            ROS_INFO("\n--- Test 2: Rapidly-exploring Random Tree (RRT) ---");
-            // TODO: Implementare RRTPlanner e decommentare
-        }
-        */
-
-        ROS_INFO("\n=== All Tests Complete ===");
-        
     } catch (const std::exception& e) {
-        ROS_ERROR("Exception in sampling_planning_test_node: %s", e.what());
+        ROS_ERROR("CRITICAL ERROR in sample_planning_test_node: %s", e.what());
         return 1;
     }
-    
+
+    ROS_INFO("\n=== Test Complete. Shutting down node. ===");
     return 0;
 }
