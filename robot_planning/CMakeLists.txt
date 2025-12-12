@@ -121,6 +121,32 @@ target_link_libraries(roadmap_test_node
 )
 add_dependencies(roadmap_test_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
+# --- Sampling Planning Test Node ---
+add_executable(sampling_planning_test_node
+    src/combinatorial_planning/planning_utils.cpp
+    src/sample_based_planning/sampling_planning_test_node.cpp
+    
+    # Core Logic
+    src/sample_based_planning/prm.cpp
+    
+    # Dependencies (Collision & Dubins)
+    src/collision_checker.cpp
+    src/dubins_trajectory.cpp
+    
+    # Infrastructure
+    src/map/map_builder.cpp
+    src/map/map_data_structures.cpp
+    src/map/map_visualization.cpp
+    src/roadmap/roadmap_data_structures.cpp
+    src/roadmap/roadmap_visualization.cpp
+)
+
+target_link_libraries(sampling_planning_test_node
+    ${catkin_LIBRARIES}
+    ${OpenCV_LIBRARIES}
+)
+add_dependencies(sampling_planning_test_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
 ## target back to the shorter version for ease of user use
