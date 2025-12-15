@@ -54,7 +54,7 @@ int main(int argc, char **argv)
         {
             ROS_INFO("\n--- Test 2: Approximate Cell Decomposition ---");
             std::shared_ptr<Roadmap> ACD_roadmap; 
-            ACD_roadmap = ApproximateDecomposition::approximateCellDecomposition(map, 5);
+            ACD_roadmap = approximateCellDecomposition(map, 5);
 
             if (!ACD_roadmap) {
                 ROS_WARN("[RoadmapTest] Cannot visualize null roadmap");
