@@ -8,7 +8,7 @@
 
 namespace sample_planning {
 
-    // Helper: NEAREST(G, q_rand) - Slide riga 5
+    // Helper: Trova l'indice del nodo più vicino nel grafo
     int getNearestNeighborIdx(const Roadmap& r, const Vertex& q_rand) {
         int nearestIdx = -1;
         double min_dist = std::numeric_limits<double>::max();
@@ -23,12 +23,11 @@ namespace sample_planning {
         return nearestIdx;
     }
 
-    // Helper: EXTEND(q_nearest, q_rand) - Slide riga 6
-    // Calcola q_new muovendosi di 'step_size' verso q_rand
+    // Helper: Muove un punto 'from' verso 'to' di una distanza massima 'step_size'
     Vertex steer(const Vertex& from, const Vertex& to, double step_size) {
         double dist = from.distance(to);
         if (dist <= step_size) {
-            return to; // Raggiungibile in un passo
+            return to; 
         } else {
             double theta = std::atan2(to.y - from.y, to.x - from.x);
             return Vertex(
@@ -38,15 +37,31 @@ namespace sample_planning {
         }
     }
 
+    // Helper: Tenta di connettere un punto target (vittima/gate) all'albero esistente
+    void connectTargetToTree(Roadmap& roadmap, const Vertex& target, const std::vector<Obstacle>& obstacles) {
+        int nearestIdx = getNearestNeighborIdx(roadmap, target);
+        if (nearestIdx == -1) return;
+
+        const Vertex& nearestNode = roadmap.getVertex(nearestIdx);
+
+        // Se la linea è libera, aggiungi il target al grafo e collegalo
+        if (!PlanningUtils::lineSegmentIntersectsObstacle(nearestNode, target, obstacles)) {
+            // Verifica opzionale: evita duplicati se il target è già stato aggiunto (qui semplificato)
+            int targetIdx = roadmap.addVertex(target);
+            roadmap.addEdge(nearestIdx, targetIdx, true); // Bidirezionale
+            // ROS_INFO("[RRT] Target connected to tree node %d", nearestIdx);
+        }
+    }
+
     std::shared_ptr<Roadmap> buildRRT(const Map& map, const RRTConfig& config) {
         auto roadmap = std::make_shared<Roadmap>();
         roadmap->setMap(&map);
 
-        // 1. G.addVertex(q_init) - Slide riga 1
+        // 1. Inserisci Root (Start)
         Vertex startNode(map.start.get_position().x, map.start.get_position().y);
         roadmap->addVertex(startNode);
 
-        // Setup Generazione Numeri Casuali
+        // Setup RNG
         double minX, minY, maxX, maxY;
         map.get_bounding_box(minX, minY, maxX, maxY);
         std::random_device rd;
@@ -55,75 +70,70 @@ namespace sample_planning {
         std::uniform_real_distribution<> disY(minY, maxY);
         std::uniform_real_distribution<> disBias(0.0, 1.0);
 
-        // Cache per collision checking veloce
+        // Cache Ostacoli e Bordi
         const auto& obstacles = map.obstacles.get_obstacles();
         std::vector<Vertex> borderPoly;
         for(const auto& bp : map.borders.get_points()) borderPoly.push_back(Vertex(bp.x, bp.y));
 
-        bool goal_reached = false;
+        // --- PREPARAZIONE GOAL BIASING ---
+        // Raccogliamo tutti i target (Vittime + Gate) in un vettore
+        std::vector<Vertex> targets;
+        if (!map.gates.get_gates().empty()) {
+            Point g = map.gates.get_gates()[0].get_position();
+            targets.push_back(Vertex(g.x, g.y));
+        }
+        for (const auto& v : map.victims.get_victims()) {
+            Point p = v.get_center();
+            targets.push_back(Vertex(p.x, p.y));
+        }
+        double goal_bias_prob = 0.10; // 10% probabilità di puntare a un target
+        // ---------------------------------
 
-        // 2. while q_goal not reached do - Slide riga 2
-        // (Usiamo un for loop con break per evitare loop infiniti se il goal è irraggiungibile)
+        // 2. Main Loop
         for (int k = 0; k < config.max_iterations; ++k) {
             
-            // Check condition "Goal Reached"
-            if (config.stop_at_goal && goal_reached) break;
-
-            // 3. q_rand = nextSample() - Slide riga 3
             Vertex q_rand;
-            
-            // Goal Bias: Ogni tanto puntiamo al goal invece che a caso
-            if (config.stop_at_goal && disBias(gen) < config.goal_bias) {
-                q_rand = config.goal_point;
+
+            // STRATEGIA 1: GOAL BIASING
+            if (!targets.empty() && disBias(gen) < goal_bias_prob) {
+                // Scegli un target a caso
+                int tIdx = std::rand() % targets.size();
+                q_rand = targets[tIdx];
             } else {
+                // Campionamento uniforme
                 q_rand = Vertex(disX(gen), disY(gen));
             }
 
-            // 4. if CLEAR(q_rand) - Slide riga 4 (Opzionale in RRT standard, ma richiesto dalla slide)
-            // Nota: RRT standard a volte accetta q_rand in collisione purché q_new sia libero, 
-            // ma seguiamo la slide che chiede CLEAR(q_rand).
-            // Controllo veloce se è nei bordi e fuori dagli ostacoli
+            // Check validità campione (CLEAR)
             if (!PlanningUtils::pointInPolygon(q_rand, borderPoly)) continue;
-            // Ottimizzazione: q_rand in ostacolo è spesso accettabile in RRT "vanilla", 
-            // ma la slide dice "if CLEAR", quindi scartiamo.
             if (PlanningUtils::pointInAnyObstacle(q_rand, obstacles)) continue; 
 
-
-            // 5. q_nearest = NEAREST(G, q_rand) - Slide riga 5
+            // NEAREST
             int q_near_idx = getNearestNeighborIdx(*roadmap, q_rand);
-            if (q_near_idx == -1) continue; 
+            if (q_near_idx == -1) continue;
             Vertex q_near = roadmap->getVertex(q_near_idx);
 
-            // 6. (q_new, path) = EXTEND(q_nearest, q_rand) - Slide riga 6
+            // EXTEND
             Vertex q_new = steer(q_near, q_rand, config.step_size);
 
-            // 7. if not COLLISION(path) - Slide riga 7
-            // Verifichiamo sia il punto q_new che il segmento [q_near, q_new]
+            // COLLISION CHECK (Punto e Segmento)
             if (PlanningUtils::pointInAnyObstacle(q_new, obstacles)) continue;
             if (!PlanningUtils::pointInPolygon(q_new, borderPoly)) continue;
             if (PlanningUtils::lineSegmentIntersectsObstacle(q_near, q_new, obstacles)) continue;
 
-            // 8. G.addVertex(q_new) - Slide riga 8
+            // ADD VERTEX & EDGE
             int q_new_idx = roadmap->addVertex(q_new);
-
-            // 9. G.addEdge(q_nearest, q_new, path) - Slide riga 9
-            roadmap->addEdge(q_near_idx, q_new_idx, true); 
-
-            // Check se abbiamo raggiunto il goal
-            if (config.stop_at_goal) {
-                if (q_new.distance(config.goal_point) <= config.goal_tolerance) {
-                    ROS_INFO("[RRT] Goal Reached at iteration %d!", k);
-                    goal_reached = true;
-                    // Opzionale: Connetti direttamente al goal esatto se la linea è libera
-                    if (!PlanningUtils::lineSegmentIntersectsObstacle(q_new, config.goal_point, obstacles)) {
-                         int goal_idx = roadmap->addVertex(config.goal_point);
-                         roadmap->addEdge(q_new_idx, goal_idx, true);
-                    }
-                }
-            }
+            roadmap->addEdge(q_near_idx, q_new_idx, true); // Bidirezionale per A*
         }
 
-        ROS_INFO("[RRT] Built tree with %d nodes", roadmap->getNumVertices());
+        // STRATEGIA 2: EXPLICIT TARGET CONNECTION
+        // Alla fine, proviamo a collegare tutti i target al ramo più vicino
+        // Questo garantisce che A* possa raggiungere esattamente la coordinata della vittima
+        ROS_INFO("[RRT] Tree built (%d nodes). Connecting Targets...", roadmap->getNumVertices());
+        for (const auto& t : targets) {
+            connectTargetToTree(*roadmap, t, obstacles);
+        }
+
         return roadmap;
     }
 }

@@ -8,7 +8,7 @@
 
 namespace sample_planning {
 
-    // Helper: Steer
+    // Helper: Steer (identico a RRT)
     Vertex steer_s(const Vertex& from, const Vertex& to, double step_size) {
         double dist = from.distance(to);
         if (dist <= step_size) return to;
@@ -17,6 +17,28 @@ namespace sample_planning {
             from.x + step_size * std::cos(theta),
             from.y + step_size * std::sin(theta)
         );
+    }
+
+    // Helper per trovare Nearest Neighbor (usato per l'aggancio finale)
+    int getNearestNeighborIdx_s(const Roadmap& r, const Vertex& q_rand) {
+        int nearestIdx = -1;
+        double min_dist = std::numeric_limits<double>::max();
+        for (int i = 0; i < r.getNumVertices(); ++i) {
+            double d = r.getVertex(i).distance(q_rand);
+            if (d < min_dist) { min_dist = d; nearestIdx = i; }
+        }
+        return nearestIdx;
+    }
+
+    // Helper Connessione Finale
+    void connectTargetToTree_s(Roadmap& roadmap, const Vertex& target, const std::vector<Obstacle>& obstacles) {
+        int nearestIdx = getNearestNeighborIdx_s(roadmap, target);
+        if (nearestIdx == -1) return;
+        const Vertex& nearestNode = roadmap.getVertex(nearestIdx);
+        if (!PlanningUtils::lineSegmentIntersectsObstacle(nearestNode, target, obstacles)) {
+            int targetIdx = roadmap.addVertex(target);
+            roadmap.addEdge(nearestIdx, targetIdx, true);
+        }
     }
 
     struct NodeData {
@@ -35,7 +57,7 @@ namespace sample_planning {
         roadmap->addVertex(startNode);
         tree_data.push_back({0.0, -1});
 
-        // Setup RNG & Cache
+        // Setup RNG
         double minX, minY, maxX, maxY;
         map.get_bounding_box(minX, minY, maxX, maxY);
         std::random_device rd;
@@ -48,12 +70,26 @@ namespace sample_planning {
         std::vector<Vertex> borderPoly;
         for(const auto& bp : map.borders.get_points()) borderPoly.push_back(Vertex(bp.x, bp.y));
 
+        // --- PREPARAZIONE GOAL BIASING ---
+        std::vector<Vertex> targets;
+        if (!map.gates.get_gates().empty()) {
+            Point g = map.gates.get_gates()[0].get_position();
+            targets.push_back(Vertex(g.x, g.y));
+        }
+        for (const auto& v : map.victims.get_victims()) {
+            Point p = v.get_center();
+            targets.push_back(Vertex(p.x, p.y));
+        }
+        double goal_bias_prob = 0.10; 
+        // ---------------------------------
+
         for (int k = 0; k < config.max_iterations; ++k) {
             
-            // 2. Sampling
+            // 2. Sampling (con Bias)
             Vertex q_rand;
-            if (config.stop_at_goal && disBias(gen) < config.goal_bias) {
-                q_rand = config.goal_point;
+            if (!targets.empty() && disBias(gen) < goal_bias_prob) {
+                int tIdx = std::rand() % targets.size();
+                q_rand = targets[tIdx];
             } else {
                 q_rand = Vertex(disX(gen), disY(gen));
             }
@@ -132,14 +168,14 @@ namespace sample_planning {
                 }
             }
             // --- RRT* END ---
-
-            if (config.stop_at_goal && q_new.distance(config.goal_point) < config.goal_tolerance) {
-                ROS_INFO("[RRT*] Goal reached at iter %d", k);
-                break;
-            }
         }
         
-        ROS_INFO("[RRT*] Built optimized tree with %d nodes", roadmap->getNumVertices());
+        // Connessione Finale Targets
+        ROS_INFO("[RRT*] Built optimized tree. Connecting Targets...");
+        for (const auto& t : targets) {
+            connectTargetToTree_s(*roadmap, t, obstacles);
+        }
+
         return roadmap;
     }
 }
