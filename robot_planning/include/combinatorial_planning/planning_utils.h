@@ -35,6 +35,9 @@ namespace PlanningUtils {
     // Checks if a vertex is already in a list (with epsilon tolerance)
     bool containsVertex(const std::vector<Vertex>& list, const Vertex& p, double epsilon = 1e-5);
 
+    // Check if a point is navigable (inside map borders, outside obstacles)
+    bool isPointValid(double x, double y, const Map& map);
+
 }
 
 #endif // PLANNING_UTILS_H

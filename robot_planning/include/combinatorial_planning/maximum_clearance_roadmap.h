@@ -34,9 +34,6 @@ namespace HelperMaxClearanceRoadmap {
     // Adds polygon edges to the segment list for Voronoi computation
     void addPolygonToSegments(const std::vector<Point>& polyPoints, 
                               std::vector<SegmentInt>& segments);
-
-    // Check if a point is navigable (inside map borders, outside obstacles)
-    bool isPointValid(double x, double y, const Map& map);
 }
 
 #endif // ROADMAP_GENERATOR_H

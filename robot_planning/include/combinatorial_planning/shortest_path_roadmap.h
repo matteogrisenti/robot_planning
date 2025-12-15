@@ -7,17 +7,13 @@
 
 /**
  * @brief Generates a Shortest Path Roadmap (Reduced Visibility Graph).
- * * LOGIC:
- * 1. Vertices: Includes all "Reflex" vertices.
- * - For Obstacles (Convex): All vertices are reflex relative to C-free.
- * - For Map Borders: Only concave corners (internal angle > 180 deg) are reflex.
- * 2. Edges: 
- * - Existing edges of the obstacles/borders (if navigable).
- * - "Bitangent" lines: Connections between mutually visible reflex vertices 
- * that do not intersect the interior of any obstacle.
- * * @param map The input Map object.
+ * @param map The input Map object.
+ * @param padding Optional padding distance to inflate obstacles.
  * @return Roadmap A populated roadmap containing the visibility graph.
  */
-std::shared_ptr<Roadmap> generateShortestPathRoadmap(const Map& map);
+std::shared_ptr<Roadmap> generateShortestPathRoadmap(const Map& map, const double padding = 0.0);
+
+
+std::vector<Point> applyPaddingToPolygon(const std::vector<Point>& poly, double padding = 0.0);
 
 #endif // SHORTEST_PATH_ROADMAP_H

@@ -91,7 +91,7 @@ std::shared_ptr<Roadmap> generateMaxClearanceRoadmap(const Map& map) {
             double y1 = v1->y() / HelperMaxClearanceRoadmap::SCALING_FACTOR;
 
             // Check if both ends are valid
-            if (HelperMaxClearanceRoadmap::isPointValid(x0, y0, map) && HelperMaxClearanceRoadmap::isPointValid(x1, y1, map)) {
+            if (PlanningUtils::isPointValid(x0, y0, map) && PlanningUtils::isPointValid(x1, y1, map)) {
                 int id0 = get_roadmap_idx(v0);
                 int id1 = get_roadmap_idx(v1);
                 roadmap->addEdge(id0, id1, true);
@@ -121,19 +121,6 @@ namespace HelperMaxClearanceRoadmap {
         }
     }
 
-    // Check if a point is navigable (inside map borders, outside obstacles)
-    bool isPointValid(double x, double y, const Map& map) {
-        std::vector<Vertex> mapPoly;
-        for(const auto& p : map.borders.get_points())
-            mapPoly.push_back(PlanningUtils::toVertex(p));
 
-        // 1. Must be INSIDE the map borders
-        if(PlanningUtils::pointInPolygon( Vertex(x, y), mapPoly) == false) {
-            return false; 
-        }
-
-        // 2. Must be OUTSIDE all obstacles
-        return !PlanningUtils::pointInAnyObstacle(Vertex(x, y), map.obstacles.get_obstacles());
-    }
 }
 

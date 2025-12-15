@@ -17,15 +17,29 @@ double crossProduct(const Point& a, const Point& b, const Point& c) {
 
 
 
-std::shared_ptr<Roadmap> generateShortestPathRoadmap(const Map& map) {
+std::shared_ptr<Roadmap> generateShortestPathRoadmap(const Map& map, const double padding) {
     std::shared_ptr<Roadmap> roadmap = std::make_shared<Roadmap>();
     roadmap->setMap(&map);
 
-    // 1. Add All Obstacle Vertices as Edges
-    const auto& obstacles = map.obstacles.get_obstacles();
-    int vertex_offset = 0; // To track IDs for edge creation
+    // 0. Pre-process Obstacles with Padding
+    // We create a local vector of obstacles. If padding > 0, these will be the inflated versions.
+    // If padding == 0, these are copies of the originals.
+    // We will use THIS vector for both Roadmap Vertices and Collision Checks.
+    std::vector<Obstacle> effective_obstacles;
+    
+    // We need to keep the point data alive if Obstacle stores pointers, 
+    // but the Obstacle struct in provided header copies points into a vector.
+    for (const auto& obs : map.obstacles.get_obstacles()) {
+        if (padding > EPSILON) {
+            std::vector<Point> padded_pts = applyPaddingToPolygon(obs.get_points(), padding);
+            effective_obstacles.emplace_back(&padded_pts, obs.get_radius() + (float)padding);
+        } else {
+            effective_obstacles.push_back(obs);
+        }
+    }
 
-    for (const auto& obs : obstacles) {
+    // 1. Add Reflex Vertices from Obstacles
+    for (const auto& obs : effective_obstacles) {
         const std::vector<Point>& pts = obs.get_points();
         size_t n = pts.size();
         if (n < 2) continue;
@@ -34,7 +48,11 @@ std::shared_ptr<Roadmap> generateShortestPathRoadmap(const Map& map) {
         int start_id = roadmap->getNumVertices();
 
         for (size_t i = 0; i < n; ++i) {
-            roadmap->addVertex(PlanningUtils::toVertex(pts[i]));
+            // The check is made only if padding is not zero 
+            // (in thisa case the point is guaranteed to be not valid)
+            if(padding == 0 || PlanningUtils::isPointValid(pts[i].x, pts[i].y, map) == true) {
+                roadmap->addVertex(PlanningUtils::toVertex(pts[i]));
+            }
         }
 
         // Add edges between consecutive vertices of the obstacle
@@ -102,7 +120,7 @@ std::shared_ptr<Roadmap> generateShortestPathRoadmap(const Map& map) {
             bool visible = true;
 
             // A. Check strict intersection with any obstacle edges
-            if (PlanningUtils::lineSegmentIntersectsObstacle(v1, v2, map.obstacles.get_obstacles())) {
+            if (PlanningUtils::lineSegmentIntersectsObstacle(v1, v2, effective_obstacles)) {
                 visible = false;
             }
 
@@ -115,4 +133,78 @@ std::shared_ptr<Roadmap> generateShortestPathRoadmap(const Map& map) {
     }
 
     return roadmap;
+}
+
+
+
+// Helper to normalize a vector
+Point normalizeVector(const Point& p) {
+    double len = std::hypot(p.x, p.y);
+    if (len < 1e-9) return {0, 0, 0};
+    return {p.x / len, p.y / len, 0};
+}
+
+Point outwardNormal(const Point& v, bool ccw) {
+    if (ccw) {
+        // right normal
+        return { v.y, -v.x, 0 };
+    } else {
+        // left normal
+        return { -v.y, v.x, 0 };
+    }
+}
+
+bool isCCW(const std::vector<Point>& poly) {
+    double area = 0.0;
+    for (size_t i = 0; i < poly.size(); ++i) {
+        size_t j = (i + 1) % poly.size();
+        area += (poly[i].x * poly[j].y - poly[j].x * poly[i].y);
+    }
+    return area > 0;
+}
+
+
+std::vector<Point> applyPaddingToPolygon(const std::vector<Point>& poly, double padding) {
+    std::vector<Point> padded_poly;
+    size_t n = poly.size();
+
+    bool ccw = isCCW(poly);
+
+    for (size_t i = 0; i < n; ++i) {
+        Point p_prev = poly[(i + n - 1) % n];
+        Point p_curr = poly[i];
+        Point p_next = poly[(i + 1) % n];
+
+        Point v1 = {p_curr.x - p_prev.x, p_curr.y - p_prev.y, 0};
+        Point v2 = {p_next.x - p_curr.x, p_next.y - p_curr.y, 0};
+
+        Point n1 = normalizeVector(outwardNormal(v1, ccw));
+        Point n2 = normalizeVector(outwardNormal(v2, ccw));
+
+        Point bisector = {n1.x + n2.x, n1.y + n2.y, 0};
+        double len = std::hypot(bisector.x, bisector.y);
+
+        if (len < 1e-6) {
+            padded_poly.push_back({
+                p_curr.x + n1.x * padding,
+                p_curr.y + n1.y * padding,
+                0
+            });
+            continue;
+        }
+
+        Point b = {bisector.x / len, bisector.y / len, 0};
+        double cos_half = n1.x * b.x + n1.y * b.y;
+        cos_half = std::max(cos_half, 0.01);
+
+        double dist = padding / cos_half;
+
+        padded_poly.push_back({
+            p_curr.x + b.x * dist,
+            p_curr.y + b.y * dist,
+            0
+        });
+    }
+
+    return padded_poly;
 }

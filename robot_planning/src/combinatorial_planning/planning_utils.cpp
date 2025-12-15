@@ -184,4 +184,19 @@ namespace PlanningUtils {
         return false;
     }
 
+    // Check if a point is navigable (inside map borders, outside obstacles)
+    bool isPointValid(double x, double y, const Map& map) {
+        std::vector<Vertex> mapPoly;
+        for(const auto& p : map.borders.get_points())
+            mapPoly.push_back(PlanningUtils::toVertex(p));
+
+        // 1. Must be INSIDE the map borders
+        if(PlanningUtils::pointInPolygon( Vertex(x, y), mapPoly) == false) {
+            return false; 
+        }
+
+        // 2. Must be OUTSIDE all obstacles
+        return !PlanningUtils::pointInAnyObstacle(Vertex(x, y), map.obstacles.get_obstacles());
+    }
+
 }
