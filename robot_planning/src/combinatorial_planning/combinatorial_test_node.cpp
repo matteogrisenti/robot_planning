@@ -36,7 +36,7 @@ int main(int argc, char **argv)
         {
             ROS_INFO("\n--- Test 1: Exact Cell Decomposition ---");
             std::shared_ptr<Roadmap> ECD_roadmap; 
-            ECD_roadmap = ExactDecomposition::exactCellDecomposition(map);
+            ECD_roadmap = exactCellDecomposition(map);
 
             if (!ECD_roadmap) {
                 ROS_WARN("[RoadmapTest] Cannot visualize null roadmap");

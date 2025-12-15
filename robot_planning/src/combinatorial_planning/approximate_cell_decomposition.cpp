@@ -47,15 +47,22 @@ namespace HelperAproximateCellDecomposition {
         
         // Check intersection with obstacles
         bool intersects = cellIntersectsObstacle(currentCell, map);
+        // Check if fully outside free space
+        bool fullyOutside = cellOutsideCheck(currentCell, map);
+        
+        // CASE 1: Completely Outside
+        if (fullyOutside) {
+            return; // Discard cell
+        }
 
-        // CASE 1: Completely Free
+        // CASE 2: Completely Free
         // If it doesn't intersect any obstacle, it's free space. Keep it.
         if (!intersects) {
             freeCells.push_back(currentCell);
             return;
         }
 
-        // CASE 2: Mixed/Occupied - Check termination criteria
+        // CASE 3: Mixed/Occupied - Check termination criteria
         double width = currentCell.maxX - currentCell.minX;
         double height = currentCell.maxY - currentCell.minY;
 
@@ -64,7 +71,7 @@ namespace HelperAproximateCellDecomposition {
             return; 
         }
 
-        // CASE 3: Mixed - Subdivide
+        // CASE 4: Mixed - Subdivide
         // Calculate Midpoints
         double midX = (currentCell.minX + currentCell.maxX) / 2.0;
         double midY = (currentCell.minY + currentCell.maxY) / 2.0;
@@ -120,6 +127,42 @@ namespace HelperAproximateCellDecomposition {
 
 
 
+    bool cellOutsideCheck(const Cell& cell, const Map& map) {
+        // Check if the cell is completely outside the map borders
+        // We check all four corners of the cell
+        Vertex corners[4] = {
+            {cell.minX, cell.minY},
+            {cell.maxX, cell.minY},
+            {cell.maxX, cell.maxY},
+            {cell.minX, cell.maxY}
+        };
+
+        std::vector<Vertex> mapPoly;
+        for(const auto& p : map.borders.get_points())
+            mapPoly.push_back(PlanningUtils::toVertex(p));
+
+        for (const Vertex corner : corners) {
+            if (PlanningUtils::pointInPolygon(corner, mapPoly)) {
+                return false; // At least one corner is inside the map
+            }
+        }
+
+        // 2. Check if any map corner (border point) is inside the cell (AABB)
+        // The cell is an Axis-Aligned Bounding Box (AABB)
+        for (const Vertex mapCorner : mapPoly) {
+            if (mapCorner.x >= cell.minX && mapCorner.x <= cell.maxX &&
+                mapCorner.y >= cell.minY && mapCorner.y <= cell.maxY) {
+                return false; // Cell is NOT outside (it contains a part of the map)
+            }
+        }
+
+        return true; // All corners are outside the map
+
+    }
+
+
+
+
     Vertex calculateRefinedCentroid(const Cell& cell, const Map& map) {
         std::vector<Vertex> mapPoly;
         for(const auto& p : map.borders.get_points())
@@ -144,15 +187,17 @@ namespace HelperAproximateCellDecomposition {
         for (const auto& p : cellCorners) {
             if (PlanningUtils::pointInPolygon(p, mapPoly)) {
                 overlapVertices.push_back(p);
-                //debug ROS_INFO("Added corner (%f, %f) to overlapVertices", p.x, p.y);
+                ROS_INFO("Added corner (%f, %f) to overlapVertices", p.x, p.y);
             }
         }
 
         // B. Add Map Vertices that are inside the Cell
         for (const auto& p : mapPoly) {
             if (cell.contains(p)) {
-                overlapVertices.push_back(p);
-                //debug ROS_INFO("Added MAP corner (%f, %f) to overlapVertices", p.x, p.y);
+                if (!PlanningUtils::containsVertex(overlapVertices, p)) {
+                    overlapVertices.push_back(p);
+                    ROS_INFO("Added MAP corner (%f, %f) to overlapVertices", p.x, p.y);
+                }
             }
         }
 
@@ -174,7 +219,7 @@ namespace HelperAproximateCellDecomposition {
                     // CHECK FOR DUPLICATES
                     if (!PlanningUtils::containsVertex(overlapVertices, inter)) {
                         overlapVertices.push_back(inter);
-                        //debug ROS_INFO("Added intersection (%f, %f)", inter.x, inter.y);
+                        ROS_INFO("Added intersection (%f, %f)", inter.x, inter.y);
                     }
                 }
             }

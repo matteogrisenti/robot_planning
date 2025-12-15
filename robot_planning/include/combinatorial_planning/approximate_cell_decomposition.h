@@ -7,7 +7,6 @@
 #include <roadmap/roadmap_data_structures.h>
 
 
-
 /**  Main Function: Recursively subdivides space into grid cells
  * @brief Generates a Roadmap using Approximate Cell Decomposition
  * @param map: The Map to decompose
@@ -33,9 +32,10 @@ namespace HelperAproximateCellDecomposition{
     // Return a vertex for each cell ( check if the center is a valid: inside the map) 
     Vertex calculateRefinedCentroid(const Cell& cell, const Map& map);
     
-
     // Checks if a cell intersects *any* obstacle 
     bool cellIntersectsObstacle(const Cell& cell, const Map& map);
+    // Checks if a cell is completely outside the map borders
+    bool cellOutsideCheck(const Cell& cell, const Map& map);
    
     // Connects adjacent free cells to form the graph
     void connectAdjacentCells(const std::vector<Cell>& cells, std::shared_ptr<Roadmap> roadmap);
