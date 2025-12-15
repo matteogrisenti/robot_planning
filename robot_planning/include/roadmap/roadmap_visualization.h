@@ -15,19 +15,28 @@ namespace roadmap_viz {
         int img_height = 1600;
         int margin = 50;
         
-        // Colors (BGR format)
-        cv::Scalar color_background = cv::Scalar(255, 255, 255);      // white
-        cv::Scalar color_border = cv::Scalar(80, 80, 80);             // dark gray
-        cv::Scalar color_obstacle_fill = cv::Scalar(100, 100, 100);   // dark gray
-        cv::Scalar color_obstacle_outline = cv::Scalar(60, 60, 60);   // darker gray
-        cv::Scalar color_vertex = cv::Scalar(255, 255, 0);            // electric blue (BGR: cyan/electric blue)
-        cv::Scalar color_edge = cv::Scalar(255, 200, 0);              // electric blue for edges
+        // --- COLORI BASE ---
+        cv::Scalar color_background = cv::Scalar(255, 255, 255);      // White
+        cv::Scalar color_border = cv::Scalar(80, 80, 80);             // Dark Gray
+        cv::Scalar color_obstacle_fill = cv::Scalar(100, 100, 100);   // Gray
+        cv::Scalar color_obstacle_outline = cv::Scalar(60, 60, 60);   
+        
+        // --- COLORI ENTITÀ (Vittime & Gate) ---
+        cv::Scalar color_victim_fill = cv::Scalar(255, 0, 255);       // Magenta
+        cv::Scalar color_victim_outline = cv::Scalar(100, 0, 100);    // Dark Magenta
+        
+        cv::Scalar color_gate = cv::Scalar(0, 200, 0);                // Green
+        int gate_arrow_length = 40;                                   // Lunghezza freccia gate
+
+        // --- COLORI ROADMAP ---
+        cv::Scalar color_vertex = cv::Scalar(255, 255, 0);            // Cyan/Electric Blue (BGR)
+        cv::Scalar color_edge = cv::Scalar(255, 200, 0);              // Blueish
         
         // Sizes
         int border_thickness = 3;
         int obstacle_thickness = 2;
-        int vertex_radius = 8;                 // big dot for vertices
-        int edge_thickness = 2;                // line thickness for edges
+        int vertex_radius = 6;                 
+        int edge_thickness = 2;              
         
         // Window name
         std::string window_name = "Roadmap Visualization";
@@ -55,9 +64,18 @@ namespace roadmap_viz {
         cv::Point worldToImage(float x, float y) const;
         cv::Point vertexToImage(const Vertex& v) const;
         
+        // Helper matematico per i Gate
+        float quaternionToYaw(const Orientation& q) const;
+
         // Drawing functions
         void drawBorders(const Borders& borders);
         void drawObstacles(const Obstacles& obstacles);
+        
+        // --- NUOVI METODI ---
+        void drawVictims(const Victims& victims);
+        void drawGates(const Gates& gates);
+        // --------------------
+
         void drawTrapezoids(const Roadmap& roadmap);
         void drawCells(const Roadmap& roadmap);
         void drawRoadmapEdges(const Roadmap& roadmap);
@@ -69,12 +87,14 @@ namespace roadmap_viz {
         
         // Main render function
         void render(const Map& map, const Roadmap& roadmap);
+
+        // Disegna percorso (A*)
+        void drawPath(const Roadmap& roadmap, const std::vector<int>& path);
         
         // Display/Save functions
         void display();
         bool saveToFile(const std::string& filename);
         
-        // Get the rendered canvas
         const cv::Mat& getCanvas() const { return canvas_; }
     };
 
