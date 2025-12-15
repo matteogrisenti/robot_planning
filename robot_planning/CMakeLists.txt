@@ -177,3 +177,25 @@ target_link_libraries(test_roadmap
     ${OpenCV_LIBRARIES}
 )
 add_dependencies(test_roadmap ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+
+# 1. Libreria Graph Search (A* e Task Planner)
+add_library(graph_search_lib src/graph_search/astar.cpp)
+target_link_libraries(graph_search_lib
+    roadmap_data_structures
+    map_data_structures
+    ${catkin_LIBRARIES}
+)
+# 2. Nuovo Nodo di Test
+add_executable(astar_planning_test_node src/graph_search/astar_planning_test_node.cpp)
+target_link_libraries(astar_planning_test_node
+    map_builder
+    graph_search_lib           # <--- La nuova lib
+    sample_planning_lib        # <--- Per PRM/RRT
+    exact_cell_decomposition   #
+    approximate_cell_decomposition
+    maximum_clearance_roadmap
+    roadmap_data_structures
+    ${catkin_LIBRARIES}
+    ${OpenCV_LIBRARIES}
+)
+add_dependencies(astar_planning_test_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
