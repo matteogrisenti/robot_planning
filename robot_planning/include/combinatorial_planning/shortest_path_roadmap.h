@@ -1,6 +1,7 @@
 #ifndef SHORTEST_PATH_ROADMAP_H
 #define SHORTEST_PATH_ROADMAP_H
 
+#include <memory>
 #include "map/map_data_structures.h"
 #include "roadmap/roadmap_data_structures.h"
 
@@ -17,6 +18,6 @@
  * * @param map The input Map object.
  * @return Roadmap A populated roadmap containing the visibility graph.
  */
-Roadmap generateShortestPathRoadmap(const Map& map);
+std::shared_ptr<Roadmap> generateShortestPathRoadmap(const Map& map);
 
 #endif // SHORTEST_PATH_ROADMAP_H

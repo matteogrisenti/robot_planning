@@ -32,7 +32,7 @@ int main(int argc, char **argv)
         
         ROS_INFO("=== Testing Different Algorithms ===");
         
-        // Test 1: Maximum Clearance Roadmap
+        // Test 1: Exact Cell Decomposition
         {
             ROS_INFO("\n--- Test 1: Exact Cell Decomposition ---");
             std::shared_ptr<Roadmap> ECD_roadmap; 
@@ -49,8 +49,8 @@ int main(int argc, char **argv)
             std::string output_file = "src/robot_planning/src/combinatorial_planning/test/ECD_roadmap_approx.png";
             ECD_roadmap->plot(false, true, output_file);
         }
-        
-        // Test 2: Exact Cell Decomposition
+
+        // Test 2: Approximate Cell Decomposition
         {
             ROS_INFO("\n--- Test 2: Approximate Cell Decomposition ---");
             std::shared_ptr<Roadmap> ACD_roadmap; 
@@ -72,45 +72,38 @@ int main(int argc, char **argv)
         {
             ROS_INFO("\n--- Test 3: Maximum Clearance Roadmap ---");
             
-            // 1. Generate roadmap using the new function
-            Roadmap MCR_roadmap = generateMaxClearanceRoadmap(map);
+            std::shared_ptr<Roadmap> MCR_roadmap;
+            MCR_roadmap = generateMaxClearanceRoadmap(map);
             
-            // 2. Check if roadmap has vertices
-            if (MCR_roadmap.getNumVertices() == 0) {
-                ROS_WARN("[RoadmapTest] Roadmap has no vertices. Check map bounds or obstacle density.");
-            } else {
-                ROS_INFO("[RoadmapTest] Visualizing roadmap with %d vertices...", 
-                        MCR_roadmap.getNumVertices());
-                
-                // 3. Display or save
-                std::string output_file = "src/robot_planning/src/combinatorial_planning/test/MCR_roadmap_approx.png";
-                
-                // plot(display, save, path)
-                MCR_roadmap.plot(false, true, output_file);
-                ROS_INFO("[RoadmapTest] Saved roadmap to: %s", output_file.c_str());
+            if (!MCR_roadmap) {
+                ROS_WARN("[RoadmapTest] Cannot visualize null roadmap");
+                return 1;
             }
+            
+            ROS_INFO("[RoadmapTest] Visualizing roadmap...");
+            
+            // Display or save
+            std::string output_file = "src/robot_planning/src/combinatorial_planning/test/MCR_roadmap_approx.png";
+            MCR_roadmap->plot(false, true, output_file);
         }
 
         // Test 4: Shortest Path Roadmap
         {
             ROS_INFO("\n--- Test 4: Shortest Path Roadmap ---");
             
-            // 1. Generate roadmap using the new function
-            Roadmap SP_roadmap = generateShortestPathRoadmap(map);
-            // 2. Check if roadmap has vertices
-            if (SP_roadmap.getNumVertices() == 0) {
-                ROS_WARN("[RoadmapTest] Roadmap has no vertices. Check map bounds or obstacle density.");
-            } else {
-                ROS_INFO("[RoadmapTest] Visualizing roadmap with %d vertices...", 
-                        SP_roadmap.getNumVertices());
-                
-                // 3. Display or save
-                std::string output_file = "src/robot_planning/src/combinatorial_planning/test/SP_roadmap_approx.png";
-                
-                // plot(display, save, path)
-                SP_roadmap.plot(false, true, output_file);
-                ROS_INFO("[RoadmapTest] Saved roadmap to: %s", output_file.c_str());
+            std::shared_ptr<Roadmap> SPR_roadmap;
+            SPR_roadmap = generateShortestPathRoadmap(map);
+
+            if (!SPR_roadmap) {
+                ROS_WARN("[RoadmapTest] Cannot visualize null roadmap");
+                return 1;
             }
+
+            ROS_INFO("[RoadmapTest] Visualizing roadmap...");
+
+            // Display or save
+            std::string output_file = "src/robot_planning/src/combinatorial_planning/test/SPR_roadmap_approx.png";
+            SPR_roadmap->plot(false, true, output_file);
         }
                 
         ROS_INFO("\n=== All Tests Complete ===");

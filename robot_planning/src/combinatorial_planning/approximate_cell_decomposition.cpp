@@ -172,7 +172,7 @@ namespace HelperAproximateCellDecomposition {
         if (PlanningUtils::pointInPolygon(cell.center, mapPoly)) {
             return cell.center; 
         }
-        ROS_INFO("Cell center (%f, %f) is outside map, refining centroid...", cell.center.x, cell.center.y);
+        //debug ROS_INFO("Cell center (%f, %f) is outside map, refining centroid...", cell.center.x, cell.center.y);
 
         // 2. The Center is OUTSIDE. Compute the "Polygon of Overlap".
         // We collect all vertices that define the intersection polygon.
@@ -187,7 +187,7 @@ namespace HelperAproximateCellDecomposition {
         for (const auto& p : cellCorners) {
             if (PlanningUtils::pointInPolygon(p, mapPoly)) {
                 overlapVertices.push_back(p);
-                ROS_INFO("Added corner (%f, %f) to overlapVertices", p.x, p.y);
+                //debug  ROS_INFO("Added corner (%f, %f) to overlapVertices", p.x, p.y);
             }
         }
 
@@ -196,7 +196,7 @@ namespace HelperAproximateCellDecomposition {
             if (cell.contains(p)) {
                 if (!PlanningUtils::containsVertex(overlapVertices, p)) {
                     overlapVertices.push_back(p);
-                    ROS_INFO("Added MAP corner (%f, %f) to overlapVertices", p.x, p.y);
+                    //debug  ROS_INFO("Added MAP corner (%f, %f) to overlapVertices", p.x, p.y);
                 }
             }
         }
@@ -219,7 +219,7 @@ namespace HelperAproximateCellDecomposition {
                     // CHECK FOR DUPLICATES
                     if (!PlanningUtils::containsVertex(overlapVertices, inter)) {
                         overlapVertices.push_back(inter);
-                        ROS_INFO("Added intersection (%f, %f)", inter.x, inter.y);
+                        //debug  ROS_INFO("Added intersection (%f, %f)", inter.x, inter.y);
                     }
                 }
             }
