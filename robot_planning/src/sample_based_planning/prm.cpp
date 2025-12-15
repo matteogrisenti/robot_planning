@@ -28,7 +28,6 @@ namespace sample_planning {
         ROS_INFO("[PRM] Starting construction with N=%d, K=%d", config.num_samples, config.k_neighbors);
 
         // --- PHASE 1: SAMPLING ---
-        // Slide lines 1-6
         
         // 1. Determine Sampling Bounds
         double minX, minY, maxX, maxY;
@@ -41,9 +40,52 @@ namespace sample_planning {
         std::uniform_real_distribution<> disY(minY, maxY);
 
         int samples_added = 0;
+
+        // ==================================================================================
+        // NEW: INIEZIONE ESPLICITA TARGET (Start, Gate, Vittime)
+        // Inseriamo questi nodi PRIMA del random sampling per garantire che esistano nel grafo
+        // ==================================================================================
+        
+        // 1. Start
+        roadmap->addVertex(Vertex(map.start.get_position().x, map.start.get_position().y));
+        samples_added++;
+
+        // 2. Gate (se presente)
+        if (!map.gates.get_gates().empty()) {
+            Point g = map.gates.get_gates()[0].get_position();
+            // Controlliamo la validità per sicurezza, ma li aggiungiamo prioritariamente
+            Vertex gateV(g.x, g.y);
+            if (isConfigurationFree(gateV, map)) {
+                roadmap->addVertex(gateV);
+                samples_added++;
+            } else {
+                ROS_WARN("[PRM] Gate position is in collision or out of bounds! Not added.");
+            }
+        }
+
+        // 3. Vittime
+        for (const auto& v : map.victims.get_victims()) {
+            Point p = v.get_center();
+            Vertex victimV(p.x, p.y);
+            
+            // Nota: Le vittime sono spesso circondate da spazio libero per definizione, 
+            // ma un check veloce non fa male.
+            if (isConfigurationFree(victimV, map)) {
+                roadmap->addVertex(victimV);
+                samples_added++;
+            } else {
+                ROS_WARN("[PRM] Victim at (%.2f, %.2f) is invalid! Not added.", p.x, p.y);
+            }
+        }
+        
+        ROS_INFO("[PRM] Injected %d critical nodes (Start/Gate/Victims). Filling rest with random samples...", samples_added);
+        // ==================================================================================
+
+
         int max_attempts = config.num_samples * 100; // Safety break
         int attempts = 0;
 
+        // Riempiamo il resto del grafo fino a N campioni
         while (samples_added < config.num_samples && attempts < max_attempts) {
             attempts++;
             
@@ -81,18 +123,15 @@ namespace sample_planning {
 
                 const Vertex& q_near = roadmap->getVertex(neighbor_idx);
 
-                // Optional: Check max connection distance (not strictly in slide, but good practice)
+                // Optional: Check max connection distance
                 if (config.max_connection_dist > 0 && q.distance(q_near) > config.max_connection_dist) {
                     continue;
                 }
 
                 // 2. Local Planner / Collision Check (PATH & COLLISION)
-                // We assume a straight line local planner.
-                // Using PlanningUtils to check line segment collision.
                 if (!PlanningUtils::lineSegmentIntersectsObstacle(q, q_near, map.obstacles.get_obstacles())) {
                     
                     // 3. Add Edge
-                    // Weight is Euclidean distance (calculated automatically by addEdge overload #1)
                     roadmap->addEdge(i, neighbor_idx, true);
                     edges_added++;
                 }
