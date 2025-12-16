@@ -204,6 +204,7 @@ target_link_libraries(astar_planning_test_node
     exact_cell_decomposition   #
     approximate_cell_decomposition
     maximum_clearance_roadmap
+    shortest_path_roadmap
     roadmap_data_structures
     ${catkin_LIBRARIES}
     ${OpenCV_LIBRARIES}

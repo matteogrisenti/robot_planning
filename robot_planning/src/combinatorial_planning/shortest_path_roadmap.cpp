@@ -6,6 +6,7 @@
 #include <cmath>
 #include <algorithm>
 #include <memory>
+#include <iostream> 
 
 // Constants
 const double EPSILON = 1e-5;
@@ -15,6 +16,8 @@ double crossProduct(const Point& a, const Point& b, const Point& c) {
     return (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
 }
 
+// Forward declaration of helpers
+std::vector<Point> applyPaddingToPolygon(const std::vector<Point>& poly, double padding);
 
 
 std::shared_ptr<Roadmap> generateShortestPathRoadmap(const Map& map, const double padding) {
@@ -22,13 +25,8 @@ std::shared_ptr<Roadmap> generateShortestPathRoadmap(const Map& map, const doubl
     roadmap->setMap(&map);
 
     // 0. Pre-process Obstacles with Padding
-    // We create a local vector of obstacles. If padding > 0, these will be the inflated versions.
-    // If padding == 0, these are copies of the originals.
-    // We will use THIS vector for both Roadmap Vertices and Collision Checks.
     std::vector<Obstacle> effective_obstacles;
     
-    // We need to keep the point data alive if Obstacle stores pointers, 
-    // but the Obstacle struct in provided header copies points into a vector.
     for (const auto& obs : map.obstacles.get_obstacles()) {
         if (padding > EPSILON) {
             std::vector<Point> padded_pts = applyPaddingToPolygon(obs.get_points(), padding);
@@ -44,29 +42,31 @@ std::shared_ptr<Roadmap> generateShortestPathRoadmap(const Map& map, const doubl
         size_t n = pts.size();
         if (n < 2) continue;
 
-        // Store starting index for this obstacle's vertices
         int start_id = roadmap->getNumVertices();
 
         for (size_t i = 0; i < n; ++i) {
-            // The check is made only if padding is not zero 
-            // (in thisa case the point is guaranteed to be not valid)
-            if(padding == 0 || PlanningUtils::isPointValid(pts[i].x, pts[i].y, map) == true) {
+            if(padding == 0 || PlanningUtils::isPointValid(pts[i].x, pts[i].y, map)) {
                 roadmap->addVertex(PlanningUtils::toVertex(pts[i]));
             }
         }
 
-        // Add edges between consecutive vertices of the obstacle
-        for (size_t i = 0; i < n; ++i) {
-            int u = start_id + i;
-            int v = start_id + ((i + 1) % n);
-            roadmap->addEdge(u, v);
+        // Add edges between consecutive vertices (polygon boundary)
+        int current_nodes = roadmap->getNumVertices();
+        int added_count = current_nodes - start_id;
+        
+        // Only connect if we actually added vertices for this obstacle
+        if (added_count > 1) { 
+            for (int i = 0; i < added_count; ++i) {
+                int u = start_id + i;
+                int v = start_id + ((i + 1) % added_count);
+                roadmap->addEdge(u, v);
+            }
         }
     }
 
     // 2. Add Reflex Vertices from Map Borders
     const std::vector<Point>& b_pts = map.borders.get_points();
     if (b_pts.size() >= 3) {
-        // Determine winding order (Shoelace formula) to distinguish convex vs reflex
         double area = 0;
         for (size_t i = 0; i < b_pts.size(); ++i) {
             size_t j = (i + 1) % b_pts.size();
@@ -80,10 +80,6 @@ std::shared_ptr<Roadmap> generateShortestPathRoadmap(const Map& map, const doubl
             const Point& next = b_pts[(i + 1) % b_pts.size()];
 
             double cp = crossProduct(prev, curr, next);
-
-            // Logic: Detect Reflex (concave) corners where paths might pivot.
-            // CCW: Right Turn (< 0) is Reflex.
-            // CW:  Left Turn (> 0) is Reflex.
             bool isReflex = isCCW ? (cp < -EPSILON) : (cp > EPSILON);
 
             if (isReflex) {
@@ -92,16 +88,29 @@ std::shared_ptr<Roadmap> generateShortestPathRoadmap(const Map& map, const doubl
         }
     }
 
-    // 3. Connect Visible Vertices (Bitangents)
-    // Iterate through all unique pairs of vertices to form the Visibility Graph.
-    // This connects any two vertices (u, v) if the line segment uv lies entirely in Free Space.
-    int num_vertices = roadmap->getNumVertices();
+    // ========================================================
+    // 3. INJECT TARGETS (Start, Gates, Victims)
+    // ========================================================
+    // Questi punti devono essere parte del grafo per essere connessi
+    
+    // Start
+    roadmap->addVertex(PlanningUtils::toVertex(map.start.get_position()));
 
-    // Prepare map border vertices once for efficiency in the loop
-    std::vector<Vertex> map_border_vertices;
-    for (const auto& p : map.borders.get_points()) {
-        map_border_vertices.push_back(PlanningUtils::toVertex(p));
+    // Gates
+    for (const auto& gate : map.gates.get_gates()) {
+        roadmap->addVertex(PlanningUtils::toVertex(gate.get_position()));
     }
+
+    // Victims
+    for (const auto& victim : map.victims.get_victims()) {
+        roadmap->addVertex(PlanningUtils::toVertex(victim.get_center()));
+    }
+    // ========================================================
+
+
+    // 4. Connect Visible Vertices (Visibility Graph Construction)
+    // O(N^2) check: connect all pairs (u,v) if visible
+    int num_vertices = roadmap->getNumVertices();
 
     for (int i = 0; i < num_vertices; ++i) {
         for (int j = i + 1; j < num_vertices; ++j) {
@@ -109,24 +118,17 @@ std::shared_ptr<Roadmap> generateShortestPathRoadmap(const Map& map, const doubl
             Vertex v1 = roadmap->getVertex(i);
             Vertex v2 = roadmap->getVertex(j);
 
-            // Optimization: Skip extremely short segments (floating point noise)
+            // Optimization: Skip extremely short segments
             double dx = v1.x - v2.x;
             double dy = v1.y - v2.y;
-            double dist_sq = dx*dx + dy*dy;
-            
-            if (dist_sq < (1e-5 * 1e-5)) continue; 
+            if ((dx*dx + dy*dy) < 1e-10) continue; 
 
             // ---------------- VISIBILITY CHECK ----------------
-            bool visible = true;
-
-            // A. Check strict intersection with any obstacle edges
-            if (PlanningUtils::lineSegmentIntersectsObstacle(v1, v2, effective_obstacles)) {
-                visible = false;
-            }
+            // Check intersection with any obstacle edge (using effective/padded obstacles)
+            bool visible = !PlanningUtils::lineSegmentIntersectsObstacle(v1, v2, effective_obstacles);
 
             // ---------------- ADD EDGE ----------------
             if (visible) {
-                // Calculate Euclidean distance for edge weight
                 roadmap->addEdge(i, j, true);
             }
         }
@@ -135,9 +137,8 @@ std::shared_ptr<Roadmap> generateShortestPathRoadmap(const Map& map, const doubl
     return roadmap;
 }
 
+// --- Internal Helper Implementations ---
 
-
-// Helper to normalize a vector
 Point normalizeVector(const Point& p) {
     double len = std::hypot(p.x, p.y);
     if (len < 1e-9) return {0, 0, 0};
@@ -145,13 +146,8 @@ Point normalizeVector(const Point& p) {
 }
 
 Point outwardNormal(const Point& v, bool ccw) {
-    if (ccw) {
-        // right normal
-        return { v.y, -v.x, 0 };
-    } else {
-        // left normal
-        return { -v.y, v.x, 0 };
-    }
+    if (ccw) return { v.y, -v.x, 0 }; // Right normal
+    else return { -v.y, v.x, 0 };     // Left normal
 }
 
 bool isCCW(const std::vector<Point>& poly) {
@@ -163,10 +159,10 @@ bool isCCW(const std::vector<Point>& poly) {
     return area > 0;
 }
 
-
 std::vector<Point> applyPaddingToPolygon(const std::vector<Point>& poly, double padding) {
     std::vector<Point> padded_poly;
     size_t n = poly.size();
+    if (n < 3) return poly;
 
     bool ccw = isCCW(poly);
 
@@ -185,25 +181,16 @@ std::vector<Point> applyPaddingToPolygon(const std::vector<Point>& poly, double 
         double len = std::hypot(bisector.x, bisector.y);
 
         if (len < 1e-6) {
-            padded_poly.push_back({
-                p_curr.x + n1.x * padding,
-                p_curr.y + n1.y * padding,
-                0
-            });
+            padded_poly.push_back({p_curr.x + n1.x * padding, p_curr.y + n1.y * padding, 0});
             continue;
         }
 
         Point b = {bisector.x / len, bisector.y / len, 0};
         double cos_half = n1.x * b.x + n1.y * b.y;
-        cos_half = std::max(cos_half, 0.01);
+        cos_half = std::max(cos_half, 0.01); 
 
         double dist = padding / cos_half;
-
-        padded_poly.push_back({
-            p_curr.x + b.x * dist,
-            p_curr.y + b.y * dist,
-            0
-        });
+        padded_poly.push_back({p_curr.x + b.x * dist, p_curr.y + b.y * dist, 0});
     }
 
     return padded_poly;

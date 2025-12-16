@@ -9,10 +9,10 @@
 
 int main(int argc, char **argv)
 {
-    ros::init(argc, argv, "roadmap_test_node");
+    ros::init(argc, argv, "combinatorial_test_node");
     ros::NodeHandle nh;
     
-    ROS_INFO("=== Roadmap Test Node Started ===");
+    ROS_INFO("=== Combinatorial Roadmap Test Node Started ===");
     
     try {
         // Build map once
@@ -20,7 +20,6 @@ int main(int argc, char **argv)
         map_builder::MapBuilder builder(nh, 100.0);
         Map map = builder.buildMap();
         
-        // CORREZIONE PATH: src/robot_planning/robot_planning/src/...
         std::string base_path = "src/robot_planning/robot_planning/src/combinatorial_planning/test/";
         
         map.plot(false, true, base_path + "map.png");
@@ -31,32 +30,31 @@ int main(int argc, char **argv)
         {
             ROS_INFO("\n--- Test 1: Exact Cell Decomposition ---");
             std::shared_ptr<Roadmap> ECD_roadmap; 
-            ECD_roadmap = exactCellDecomposition(map);
+            ECD_roadmap = ExactDecomposition::exactCellDecomposition(map);
 
             if (ECD_roadmap) {
                 ROS_INFO("[RoadmapTest] Visualizing roadmap...");
                 ECD_roadmap->plot(false, true, base_path + "ECD_roadmap_approx.png");
+            } else {
+                ROS_WARN("[RoadmapTest] ECD Roadmap generation failed.");
             }
         }
-<<<<<<< HEAD:robot_planning/src/combinatorial_planning/roadmap_test_node.cpp
-        
-=======
 
->>>>>>> e033b818ae5240edf046b6df58f6f8aed5d7eda7:robot_planning/src/combinatorial_planning/combinatorial_test_node.cpp
         // Test 2: Approximate Cell Decomposition
         {
             ROS_INFO("\n--- Test 2: Approximate Cell Decomposition ---");
             std::shared_ptr<Roadmap> ACD_roadmap; 
-            ACD_roadmap = approximateCellDecomposition(map, 5);
+            ACD_roadmap = ApproximateDecomposition::approximateCellDecomposition(map, 5);
 
             if (ACD_roadmap) {
                 ROS_INFO("[RoadmapTest] Visualizing roadmap...");
                 ACD_roadmap->plot(false, true, base_path + "ACD_roadmap_approx.png");
+            } else {
+                ROS_WARN("[RoadmapTest] ACD Roadmap generation failed.");
             }
         }
         
-<<<<<<< HEAD:robot_planning/src/combinatorial_planning/roadmap_test_node.cpp
-        // Test 3: Maximum Clearance
+        // Test 3: Maximum Clearance Roadmap
         {
             ROS_INFO("\n--- Test 3: Maximum Clearance Roadmap ---");
             std::shared_ptr<Roadmap> MCR_roadmap; 
@@ -65,45 +63,31 @@ int main(int argc, char **argv)
             if (MCR_roadmap) {
                 ROS_INFO("[RoadmapTest] Visualizing roadmap...");
                 MCR_roadmap->plot(false, true, base_path + "MCR_roadmap_approx.png");
-=======
-        // Test 3: Maximum Clearance Roadmap (Voronoi)
-        {
-            ROS_INFO("\n--- Test 3: Maximum Clearance Roadmap ---");
-            
-            std::shared_ptr<Roadmap> MCR_roadmap;
-            MCR_roadmap = generateMaxClearanceRoadmap(map);
-            
-            if (!MCR_roadmap) {
-                ROS_WARN("[RoadmapTest] Cannot visualize null roadmap");
-                return 1;
->>>>>>> e033b818ae5240edf046b6df58f6f8aed5d7eda7:robot_planning/src/combinatorial_planning/combinatorial_test_node.cpp
+            } else {
+                ROS_WARN("[RoadmapTest] MCR Roadmap generation failed.");
             }
         }
 
-        // Test 4: Shortest Path Roadmap
+        // Test 4: Shortest Path Roadmap (se presente)
         {
             ROS_INFO("\n--- Test 4: Shortest Path Roadmap ---");
-            
+            // Nota: Assicurati che shortest_path_roadmap.cpp sia compilato nel CMakeLists.txt
             std::shared_ptr<Roadmap> SPR_roadmap;
-            SPR_roadmap = generateShortestPathRoadmap(map, 0.2); // Example padding of 0.2 units
+            SPR_roadmap = generateShortestPathRoadmap(map, 0.2); 
 
-            if (!SPR_roadmap) {
-                ROS_WARN("[RoadmapTest] Cannot visualize null roadmap");
-                return 1;
+            if (SPR_roadmap) {
+                ROS_INFO("[RoadmapTest] Visualizing roadmap...");
+                SPR_roadmap->plot(false, true, base_path + "SPR_roadmap_approx.png");
+            } else {
+                ROS_WARN("[RoadmapTest] SPR Roadmap generation failed.");
             }
-
-            ROS_INFO("[RoadmapTest] Visualizing roadmap...");
-
-            // Display or save
-            std::string output_file = "src/robot_planning/src/combinatorial_planning/test/SPR_roadmap_approx.png";
-            SPR_roadmap->plot(false, true, output_file);
         }
                 
         ROS_INFO("\n=== All Tests Complete ===");
         ROS_INFO("Check generated PNG files in %s", base_path.c_str());
         
     } catch (const std::exception& e) {
-        ROS_ERROR("Exception in roadmap_test_node: %s", e.what());
+        ROS_ERROR("Exception in combinatorial_test_node: %s", e.what());
         return 1;
     }
     

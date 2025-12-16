@@ -13,6 +13,7 @@
 #include "combinatorial_planning/exact_cell_decomposition.h"
 #include "combinatorial_planning/approximate_cell_decomposition.h"
 #include "combinatorial_planning/maximum_clearance_roadmap.h"
+#include "combinatorial_planning/shortest_path_roadmap.h" // <--- INCLUSIONE AGGIUNTA
 #include "sample_based_planning/prm.h"
 #include "sample_based_planning/rrt.h"
 #include "sample_based_planning/rrt_star.h"
@@ -41,6 +42,7 @@ shared_ptr<Roadmap> generateRoadmap(const string& type, const Map& map) {
     else if (type == "ecd") return ExactDecomposition::exactCellDecomposition(map);
     else if (type == "acd") return ApproximateDecomposition::approximateCellDecomposition(map, 4);
     else if (type == "mcr") return MaxClearanceRoadmap::maximumClearanceRoadmap(map);
+    else if (type == "spr") return generateShortestPathRoadmap(map, 0.2); // <--- CASO SPR AGGIUNTO (Padding 0.2)
     else if (type == "rrt") {
         sample_planning::RRTConfig config; 
         config.max_iterations = 3000; 
@@ -64,9 +66,9 @@ int main(int argc, char **argv) {
     ros::init(argc, argv, "astar_planning_benchmark_node");
     ros::NodeHandle nh("~");
 
-    // Lista di tutti i planner da testare
+    // Lista di tutti i planner da testare (AGGIUNTO "spr")
     vector<string> planner_types = {
-        "prm", "rrt", "rrt_star", "ecd", "acd", "mcr"
+        "prm", "rrt", "rrt_star", "ecd", "acd", "mcr", "spr"
     };
     
     vector<BenchmarkResult> report;

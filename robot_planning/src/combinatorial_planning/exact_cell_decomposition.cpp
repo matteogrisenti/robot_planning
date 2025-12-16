@@ -9,17 +9,12 @@
 namespace ExactDecomposition {
 
     // --- Internal Helpers ---
-
     struct Point2D { double x, y; };
 
     struct Segment {
         Point2D p1, p2;
-        
-        // Calculate Y at a specific X on this segment
         double getYAtX(double x) const {
-            // Handle vertical segments safely (though they usually define the walls, not top/bot)
             if (std::abs(p2.x - p1.x) < 1e-9) return std::max(p1.y, p2.y); 
-            
             double t = (x - p1.x) / (p2.x - p1.x);
             return p1.y + t * (p2.y - p1.y);
         }
@@ -27,82 +22,26 @@ namespace ExactDecomposition {
 
     Point2D toPoint2D(const Point& p) { return {p.x, p.y}; }
 
-    // Check if a point is in valid free space (inside borders, outside obstacles)
     bool isFreeSpace(const Vertex& p, const Map& map) {
-        // 1. Must be inside Map Borders
         std::vector<Vertex> borderPoly;
         for(const auto& bp : map.borders.get_points()) borderPoly.push_back(Vertex(bp.x, bp.y));
         if (!PlanningUtils::pointInPolygon(p, borderPoly)) return false;
-
-        // 2. Must NOT be inside any Obstacle
         if (PlanningUtils::pointInAnyObstacle(p, map.obstacles.get_obstacles())) return false;
-
         return true;
     }
 
-    // --- Main Function ---
-
-    std::shared_ptr<Roadmap> exactCellDecomposition(const Map& map) {
-        auto roadmap = std::make_shared<Roadmap>();
-        roadmap->setMap(&map);
-
-        // 1. Compute Decomposition
-        std::vector<Trapezoid> trapezoids = computeTrapezoidalDecomposition(map);
-        // Link it to the roadmap for plotting
-        roadmap->debugTrapezoids = std::make_shared<std::vector<Trapezoid>>(trapezoids);
-
-        // 2. Compute Adjacency (Neighbors)
-        connectAdjacentTrapezoids(trapezoids);
-
-        // 3. Build Roadmap Graph
-        // Add all centroids as nodes
-        std::vector<int> trapIdToNodeId(trapezoids.size());
-        
-        for (size_t i = 0; i < trapezoids.size(); ++i) {
-            trapIdToNodeId[i] = roadmap->addVertex(trapezoids[i].center);
+    std::vector<Vertex> getAllTargets(const Map& map) {
+        std::vector<Vertex> targets;
+        targets.push_back(Vertex(map.start.get_position().x, map.start.get_position().y));
+        if (!map.gates.get_gates().empty()) {
+            Point g = map.gates.get_gates()[0].get_position();
+            targets.push_back(Vertex(g.x, g.y));
         }
-
-        // Iterate over all trapezoids to connect them
-        for (size_t i = 0; i < trapezoids.size(); ++i) {
-            const auto& t1 = trapezoids[i];
-
-            for (int neighborIdx : trapezoids[i].neighbors) {
-                // Avoid adding double edges (undirected graph)
-                if (neighborIdx <= (int)i) continue;
-
-                const auto& t2 = trapezoids[neighborIdx];
-                
-                // 1. Identify Shared Boundary X
-                bool t1IsLeft = std::abs(t1.rightX - t2.leftX) < 1e-6;
-                double sharedX = t1IsLeft ? t1.rightX : t1.leftX;
-
-                // 2. Identify Shared Boundary Y-Interval
-                // Get t1's Y range at the shared X
-                double t1_y_high = t1IsLeft ? t1.topRightY : t1.topLeftY;
-                double t1_y_low  = t1IsLeft ? t1.bottomRightY : t1.bottomLeftY;
-
-                // Get t2's Y range at the shared X
-                double t2_y_high = t1IsLeft ? t2.topLeftY : t2.topRightY;
-                double t2_y_low  = t1IsLeft ? t2.bottomLeftY : t2.bottomRightY;
-
-                // Calculate the geometric overlap
-                double overlapStart = std::max(t1_y_low, t2_y_low);
-                double overlapEnd   = std::min(t1_y_high, t2_y_high);
-
-                // 3. Create Gateway Vertex
-                // We place a vertex exactly in the middle of the "door" between trapezoids
-                double midY = (overlapStart + overlapEnd) / 2.0;
-                Vertex gateway(sharedX, midY);
-
-                int gatewayNodeId = roadmap->addVertex(gateway);
-
-                // 4. Connect: Center1 -> Gateway -> Center2
-                roadmap->addEdge(trapIdToNodeId[i], gatewayNodeId, true);
-                roadmap->addEdge(gatewayNodeId, trapIdToNodeId[neighborIdx], true);
-            }
+        for (const auto& v : map.victims.get_victims()) {
+            Point p = v.get_center();
+            targets.push_back(Vertex(p.x, p.y));
         }
-
-        return roadmap;
+        return targets;
     }
 
     // --- Decomposition Logic ---
@@ -116,7 +55,6 @@ namespace ExactDecomposition {
             for (size_t i = 0; i < pts.size(); ++i) {
                 Point2D p1 = toPoint2D(pts[i]);
                 Point2D p2 = toPoint2D(pts[(i + 1) % pts.size()]);
-                
                 x_events.insert(p1.x);
                 if (p1.x > p2.x) std::swap(p1, p2);
                 if (std::abs(p2.x - p1.x) > 1e-9) allSegments.push_back({p1, p2});
@@ -128,7 +66,7 @@ namespace ExactDecomposition {
             processPolygon(obs.get_points());
         }
 
-        // MODIFICA: Aggiungi target agli eventi per forzare la decomposizione su di essi
+        // INTEGRATION: Aggiungi X dei target agli eventi
         for (const auto& t : getAllTargets(map)) {
             x_events.insert(t.x);
         }
@@ -174,9 +112,6 @@ namespace ExactDecomposition {
     }
 
     void connectAdjacentTrapezoids(std::vector<Trapezoid>& trapezoids) {
-        // Simple O(N^2) connectivity check. 
-        // Can be optimized to O(N) by grouping trapezoids by their x_left/x_right values.
-        
         for (size_t i = 0; i < trapezoids.size(); ++i) {
             for (size_t j = i + 1; j < trapezoids.size(); ++j) {
                 Trapezoid& t1 = trapezoids[i];
@@ -222,7 +157,7 @@ namespace ExactDecomposition {
         for (size_t i = 0; i < trapezoids.size(); ++i) {
             const auto& t1 = trapezoids[i];
             for (int neighborIdx : trapezoids[i].neighbors) {
-                if (neighborIdx <= (int)i) continue;
+                if (neighborIdx <= (int)i) continue; // Avoid double edges
 
                 const auto& t2 = trapezoids[neighborIdx];
                 
@@ -238,7 +173,7 @@ namespace ExactDecomposition {
                 double overlapEnd   = std::min(t1_y_high, t2_y_high);
                 double gatewayY = (overlapStart + overlapEnd) / 2.0;
 
-                // MODIFICA: Se un target è sul confine, usalo come nodo!
+                // INTEGRATION: Se un target è sul confine, usalo come Gateway!
                 for (const auto& t : targets) {
                     if (std::abs(t.x - sharedX) < 1e-4 && t.y >= overlapStart && t.y <= overlapEnd) {
                         gatewayY = t.y;
