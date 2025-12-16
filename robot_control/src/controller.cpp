@@ -8,9 +8,9 @@
 #include <ros/ros.h>
 #include <nav_msgs/Odometry.h>
 #include <geometry_msgs/Twist.h>
-#include <loco_planning/Reference.h>
+#include <robot_control/Reference.h>
 #include <tf/transform_datatypes.h>
-#include <Eigen/Dense>
+#include <eigen3/Eigen/Dense>
 #include <vector>
 #include <string>
 #include <cmath>
@@ -126,7 +126,7 @@ public:
     explicit Controller(const std::string& robot_name = "limo1", bool debug = false)
         : robot_name_(robot_name), debug_(debug), nh_("~") 
     {
-        ROS_INFO("Controller initialized for robot: %s", robot_name_.c_str());
+        ROS_INFO("[Controller] Controller initialized for robot: %s", robot_name_.c_str());
     }
     
     ~Controller() {
@@ -158,7 +158,7 @@ public:
         dt_ = dt;
         ros::Rate rate(1.0 / dt);
         
-        ROS_INFO("Starting control loop at %.1f Hz", 1.0/dt);
+        ROS_INFO("[Controller] Starting control loop at %.1f Hz", 1.0/dt);
         
         while (ros::ok()) {
             try {
@@ -205,7 +205,7 @@ public:
                 ros::spinOnce();
                 
             } catch (const ros::Exception& e) {
-                ROS_ERROR("ROS Exception: %s", e.what());
+                ROS_ERROR("[Controller] ROS Exception: %s", e.what());
                 sendCommands(0.0, 0.0);
                 plotData();
                 break;
@@ -251,7 +251,7 @@ private:
         des_y_ = 0.0;
         des_theta_ = 0.0;
         
-        ROS_INFO("Variables initialized");
+        ROS_INFO("[Controller] Variables initialized");
     }
     
     void startPublisherSubscribers() {
@@ -267,7 +267,7 @@ private:
             &Controller::receiveReference, this,
             ros::TransportHints().tcpNoDelay());
         
-        ROS_INFO("Publishers and subscribers started");
+        ROS_INFO("[Controller] Publishers and subscribers started");
     }
     
     void receivePose(const nav_msgs::Odometry::ConstPtr& msg) {
@@ -311,9 +311,9 @@ private:
         base_twist_w_(5) = msg->twist.twist.angular.z;
     }
     
-    void receiveReference(const loco_planning::Reference::ConstPtr& msg) {
+    void receiveReference(const robot_control::Reference::ConstPtr& msg) {
         if (msg->plan_finished) {
-            ROS_INFO("Plan finished, plotting data...");
+            ROS_INFO("[Controller] Plan finished, plotting data...");
             plotData();
         } else {
             des_x_ = msg->x_d;
@@ -322,12 +322,14 @@ private:
             v_d_ = msg->v_d;
             omega_d_ = msg->omega_d;
             
+            /* Debugging 
             ROS_INFO_STREAM("\033[31mReceived " << robot_name_ 
                 << " des_x: " << des_x_ 
                 << ", des_y: " << des_y_ 
                 << ", des_theta: " << des_theta_
                 << ", des_v: " << v_d_
                 << ", des_omega: " << omega_d_ << "\033[0m");
+            */
         }
     }
     
@@ -367,7 +369,7 @@ private:
         
         // Save to home directory for easy access
         std::string home = getenv("HOME");
-        std::string filename = home + "/" + robot_name_ + "_trajectory_data.txt";
+        std::string filename = home + "/ros_ws/src/robot_control/src/test/" + robot_name_ + "_trajectory_data.txt";
         std::ofstream file(filename);
         
         if (file.is_open()) {
@@ -382,13 +384,13 @@ private:
                      << des_state_log_(2, i) << "\n";
             }
             file.close();
-            ROS_INFO("Data saved to %s", filename.c_str());
+            ROS_INFO("[Controller] Data saved to %s", filename.c_str());
         } else {
-            ROS_ERROR("Could not open file for writing: %s", filename.c_str());
+            ROS_ERROR("[Controller] Could not open file for writing: %s", filename.c_str());
         }
         
         // You could also implement plotting using matplotlib-cpp or gnuplot-iostream
-        ROS_INFO("Plotting complete. Data logged for %d samples", log_counter_);
+        ROS_INFO("[Controller] Plotting complete. Data logged for %d samples", log_counter_);
     }
     
     // Member variables
@@ -447,7 +449,7 @@ int main(int argc, char** argv) {
     
     std::string robot_name = "limo" + std::to_string(robot_id);
     
-    ROS_INFO("Starting controller for robot: %s (debug: %s)", 
+    ROS_INFO("[Controller] Starting controller for robot: %s (debug: %s)", 
              robot_name.c_str(), debug ? "true" : "false");
     
     Controller controller(robot_name, debug);

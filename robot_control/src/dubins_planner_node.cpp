@@ -4,7 +4,7 @@
 #include <tf/tf.h> 
 
 // Include your custom message for the controller
-#include <loco_planning/Reference.h>
+#include <robot_control/Reference.h>
 
 // Include your map and dubins libraries
 #include "map/map_builder.h"
@@ -51,7 +51,7 @@ public:
         
         // 2. Setup Communication
         // Publishes to the topic controller.py listens to: /{robot_name}/ref
-        pub_ref = nh.advertise<loco_planning::Reference>("/" + robot_name + "/ref", 1);
+        pub_ref = nh.advertise<robot_control::Reference>("/" + robot_name + "/ref", 1);
         sub_odom = nh.subscribe("/" + robot_name + "/odom", 1, &DubinsReferenceNode::odomCallback, this);
 
         ROS_INFO("DubinsReferenceNode started for %s. Waiting for Odom...", robot_name.c_str());
@@ -186,7 +186,7 @@ public:
     }
 
     void publishReference(double x, double y, double th, double v, double w, bool finished) {
-        loco_planning::Reference ref_msg;
+        robot_control::Reference ref_msg;
         ref_msg.x_d = x;
         ref_msg.y_d = y;
         ref_msg.theta_d = th;
