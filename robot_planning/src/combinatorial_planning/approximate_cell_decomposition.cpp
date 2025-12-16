@@ -3,101 +3,62 @@
 #include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <ros/ros.h>
 
-namespace ApproximateDecomposition {
 
-    Vertex toVertex(const Point& p) { return Vertex(p.x, p.y); }
+    // ==========================================
+    // Main Algorithm
+    // ==========================================
 
-    bool getSegmentIntersection(const Vertex& A, const Vertex& B, const Vertex& C, const Vertex& D, Vertex& intersection) {
-        double a1 = B.y - A.y; double b1 = A.x - B.x; double c1 = a1 * A.x + b1 * A.y;
-        double a2 = D.y - C.y; double b2 = C.x - D.x; double c2 = a2 * C.x + b2 * C.y;
-        double det = a1 * b2 - a2 * b1;
-        if (std::abs(det) < 1e-9) return false;
-        Vertex p((b2 * c1 - b1 * c2) / det, (a1 * c2 - a2 * c1) / det);
-        auto onSeg = [](const Vertex& p, const Vertex& s, const Vertex& e) {
-            return p.x >= std::min(s.x, e.x) - 1e-7 && p.x <= std::max(s.x, e.x) + 1e-7 &&
-                   p.y >= std::min(s.y, e.y) - 1e-7 && p.y <= std::max(s.y, e.y) + 1e-7;
-        };
-        if (onSeg(p, A, B) && onSeg(p, C, D)) { intersection = p; return true; }
-        return false;
-    }
+    std::shared_ptr<Roadmap> approximateCellDecomposition(const Map& map, int maxDepth, double minCellSize) {
+        auto roadmap = std::make_shared<Roadmap>();
+        roadmap->setMap(&map);
+        std::vector<Cell> freeCells;
 
-    Vertex calculateRefinedCentroid(const Cell& cell, const Map& map) {
-        std::vector<Vertex> mapPoly; for(const auto& p : map.borders.get_points()) mapPoly.push_back(toVertex(p));
-        if (PlanningUtils::pointInPolygon(cell.center, mapPoly)) return cell.center; 
+        // 1. Define the Root Cell (Map Bounding Box)
+        double minX, minY, maxX, maxY;
+        map.get_bounding_box(minX, minY, maxX, maxY);
         
-        std::vector<Vertex> ov;
-        std::vector<Vertex> cc = {{cell.minX, cell.minY}, {cell.maxX, cell.minY}, {cell.maxX, cell.maxY}, {cell.minX, cell.maxY}};
-        for (const auto& p : cc) if (PlanningUtils::pointInPolygon(p, mapPoly)) ov.push_back(p);
-        for (const auto& p : mapPoly) if (cell.contains(p)) ov.push_back(p);
-        
-        std::vector<std::pair<Vertex, Vertex>> ce;
-        for (size_t i = 0; i < 4; ++i) ce.push_back({cc[i], cc[(i + 1) % 4]});
-        for (size_t i = 0; i < mapPoly.size(); ++i) {
-            Vertex m1 = mapPoly[i], m2 = mapPoly[(i + 1) % mapPoly.size()];
-            for (const auto& edge : ce) {
-                Vertex inter(0,0);
-                if (getSegmentIntersection(edge.first, edge.second, m1, m2, inter)) ov.push_back(inter);
-            }
+        // Add a small buffer to ensure boundaries are covered
+        Cell root(minX, minY, maxX, maxY);
+
+        // 2. Perform Recursive Decomposition
+        recursiveDecomposition(root, map, 0, maxDepth, minCellSize, freeCells);
+        roadmap->debugCells = std::make_shared<std::vector<Cell>>(freeCells);
+
+        // 3. Convert Free Cells to Roadmap Nodes
+        for (const auto& cell : freeCells) {
+            // Check if the centroid of the cell is inside the map boundaries
+            Vertex validNode = calculateRefinedCentroid(cell, map);
+            roadmap->addVertex(validNode);
         }
-        if (ov.empty()) return cell.center;
-        double sx = 0, sy = 0; for (const auto& v : ov) { sx += v.x; sy += v.y; }
-        return Vertex(sx / ov.size(), sy / ov.size());
+
+        // 4. Connect Adjacent Cells
+        connectAdjacentCells(freeCells, roadmap);
+
+        return roadmap;
     }
 
-    bool cellIntersectsObstacle(const Cell& cell, const Map& map) {
-        for (const auto& obs : map.obstacles.get_obstacles()) {
-            for (const auto& p : obs.get_points()) if (cell.contains(Vertex(p.x, p.y))) return true;
-            Vertex c[] = {cell.center, {cell.minX, cell.minY}, {cell.maxX, cell.minY}, {cell.maxX, cell.maxY}, {cell.minX, cell.maxY}};
-            for(const auto& p : c) if(PlanningUtils::pointInObstacle(p, obs)) return true;
-        }
-        return false;
-    }
-
-    void connectAdjacentCells(const std::vector<Cell>& cells, std::shared_ptr<Roadmap> roadmap) {
-        double eps = 1e-4;
-        for (size_t i = 0; i < cells.size(); ++i) {
-            for (size_t j = i + 1; j < cells.size(); ++j) {
-                const Cell& c1 = cells[i]; const Cell& c2 = cells[j];
-                bool oX = (c1.minX < c2.maxX - eps) && (c1.maxX > c2.minX + eps);
-                bool oY = (c1.minY < c2.maxY - eps) && (c1.maxY > c2.minY + eps);
-                bool tX = std::abs(c1.maxX - c2.minX) < eps || std::abs(c1.minX - c2.maxX) < eps;
-                bool tY = std::abs(c1.maxY - c2.minY) < eps || std::abs(c1.minY - c2.maxY) < eps;
-                if ((oX && tY) || (oY && tX)) roadmap->addEdge(i, j, true);
-            }
-        }
-    }
-
-    // MODIFICA: Logica Target
-    bool cellContainsTarget(const Cell& cell, const Map& map, Vertex& outTarget) {
-        Vertex s(map.start.get_position().x, map.start.get_position().y);
-        if (cell.contains(s)) { outTarget = s; return true; }
-        if (!map.gates.get_gates().empty()) {
-            Point g = map.gates.get_gates()[0].get_position();
-            Vertex gv(g.x, g.y);
-            if (cell.contains(gv)) { outTarget = gv; return true; }
-        }
-        for (const auto& v : map.victims.get_victims()) {
-            Point p = v.get_center();
-            Vertex vv(p.x, p.y);
-            if (cell.contains(vv)) { outTarget = vv; return true; }
-        }
-        return false;
-    }
+    // ==========================================
+    // Recursive Logic
+    // ==========================================
 
     void recursiveDecomposition(const Cell& currentCell, const Map& map, 
                                 int depth, int maxDepth, double minCellSize, 
                                 std::vector<Cell>& freeCells) {
         
         bool intersects = cellIntersectsObstacle(currentCell, map);
-        Vertex dummy;
-        bool hasTarget = cellContainsTarget(currentCell, map, dummy);
 
-        if (!intersects && !hasTarget) { // Libera e SENZA target -> Foglia
+        // CASE 1: Completely Free
+        // If it doesn't intersect any obstacle, it's free space. Keep it.
+        // Note: In strict Quadtrees, we might check if it's "Fully Inside" an obstacle to discard early,
+        // but checking "Intersects == false" implies it is fully outside (Free).
+        if (!intersects) {
             freeCells.push_back(currentCell);
             return;
         }
 
+        // CASE 2: Mixed/Occupied - Check termination criteria
         double width = currentCell.maxX - currentCell.minX;
         double height = currentCell.maxY - currentCell.minY;
 
@@ -106,6 +67,8 @@ namespace ApproximateDecomposition {
             return; 
         }
 
+        // CASE 3: Mixed - Subdivide
+        // Calculate Midpoints
         double midX = (currentCell.minX + currentCell.maxX) / 2.0;
         double midY = (currentCell.minY + currentCell.maxY) / 2.0;
 
@@ -115,27 +78,186 @@ namespace ApproximateDecomposition {
         recursiveDecomposition(Cell(midX, currentCell.minY, currentCell.maxX, midY), map, depth + 1, maxDepth, minCellSize, freeCells);
     }
 
-    std::shared_ptr<Roadmap> approximateCellDecomposition(const Map& map, int maxDepth, double minCellSize) {
-        auto roadmap = std::make_shared<Roadmap>();
-        roadmap->setMap(&map);
-        std::vector<Cell> freeCells;
+    // ==========================================
+    // RECOVERY PLAN: Calculate the centroid of the intersection between Cell and Map
+    // ==========================================
+    // Helper to convert Library Point to Vertex
+    Vertex toVertex(const Point& p) { return Vertex(p.x, p.y); }
 
-        double minX, minY, maxX, maxY;
-        map.get_bounding_box(minX, minY, maxX, maxY);
-        Cell root(minX, minY, maxX, maxY);
+    // Calculate the intersection point of two line segments (AB and CD)
+    // Returns true if they intersect, and stores point in 'intersection'
+    bool getSegmentIntersection(const Vertex& A, const Vertex& B, 
+                              const Vertex& C, const Vertex& D, 
+                              Vertex& intersection) {
+        // Line AB represented as a1x + b1y = c1
+        double a1 = B.y - A.y;
+        double b1 = A.x - B.x;
+        double c1 = a1 * A.x + b1 * A.y;
 
-        recursiveDecomposition(root, map, 0, maxDepth, minCellSize, freeCells);
-        roadmap->debugCells = std::make_shared<std::vector<Cell>>(freeCells);
+        // Line CD represented as a2x + b2y = c2
+        double a2 = D.y - C.y;
+        double b2 = C.x - D.x;
+        double c2 = a2 * C.x + b2 * C.y;
 
-        for (const auto& cell : freeCells) {
-            Vertex nodePos, targetPos;
-            // MODIFICA: Se c'è un target, il nodo è il target stesso
-            if (cellContainsTarget(cell, map, targetPos)) nodePos = targetPos;
-            else nodePos = calculateRefinedCentroid(cell, map);
-            roadmap->addVertex(nodePos);
+        double determinant = a1 * b2 - a2 * b1;
+
+        if (std::abs(determinant) < 1e-9) {
+            return false; // Parallel lines
         }
 
-        connectAdjacentCells(freeCells, roadmap);
-        return roadmap;
+        double x = (b2 * c1 - b1 * c2) / determinant;
+        double y = (a1 * c2 - a2 * c1) / determinant;
+        
+        // Check if intersection is strictly within both segments
+        auto onSegment = [](const Vertex& p, const Vertex& start, const Vertex& end) {
+            return p.x >= std::min(start.x, end.x) - 1e-7 && p.x <= std::max(start.x, end.x) + 1e-7 &&
+                   p.y >= std::min(start.y, end.y) - 1e-7 && p.y <= std::max(start.y, end.y) + 1e-7;
+        };
+
+        Vertex p(x, y);
+        if (onSegment(p, A, B) && onSegment(p, C, D)) {
+            intersection = p;
+            return true;
+        }
+        return false;
     }
+
+    Vertex calculateRefinedCentroid(const Cell& cell, const Map& map) {
+        std::vector<Vertex> mapPoly;
+        for(const auto& p : map.borders.get_points()) mapPoly.push_back(toVertex(p));
+
+        // 1. Check if the default center is valid (Inside Map)
+        if (PlanningUtils::pointInPolygon(cell.center, mapPoly)) {
+            return cell.center; 
+        }
+
+        // 2. The Center is OUTSIDE. Compute the "Polygon of Overlap".
+        // We collect all vertices that define the intersection polygon.
+        std::vector<Vertex> overlapVertices;
+
+        // A. Add Cell Corners that are inside the Map
+        std::vector<Vertex> cellCorners = {
+            {cell.minX, cell.minY}, {cell.maxX, cell.minY},
+            {cell.maxX, cell.maxY}, {cell.minX, cell.maxY}
+        };
+        
+        for (const auto& p : cellCorners) {
+            if (PlanningUtils::pointInPolygon(p, mapPoly)) {
+                overlapVertices.push_back(p);
+            }
+        }
+
+        // B. Add Map Vertices that are inside the Cell
+        for (const auto& p : mapPoly) {
+            if (cell.contains(p)) {
+                overlapVertices.push_back(p);
+            }
+        }
+
+        // C. Add Intersection Points between Cell Edges and Map Edges
+        // Define Cell Segments
+        std::vector<std::pair<Vertex, Vertex>> cellEdges;
+        for (size_t i = 0; i < 4; ++i) {
+            cellEdges.push_back({cellCorners[i], cellCorners[(i + 1) % 4]});
+        }
+
+        // Check against all Map Edges
+        for (size_t i = 0; i < mapPoly.size(); ++i) {
+            Vertex m1 = mapPoly[i];
+            Vertex m2 = mapPoly[(i + 1) % mapPoly.size()];
+
+            for (const auto& edge : cellEdges) {
+                Vertex inter(0,0);
+                if (getSegmentIntersection(edge.first, edge.second, m1, m2, inter)) {
+                    overlapVertices.push_back(inter);
+                }
+            }
+        }
+
+        // 3. Derive the Centroid of the Overlap
+        if (overlapVertices.empty()) {
+            // Fallback: This effectively means the cell is completely outside 
+            // (should ideally be pruned earlier) or error. Return center as fail-safe.
+            return cell.center;
+        }
+
+        double sumX = 0;
+        double sumY = 0;
+        for (const auto& v : overlapVertices) {
+            sumX += v.x;
+            sumY += v.y;
+        }
+
+        // Return the average of the vertices of the intersection polygon
+        return Vertex(sumX / overlapVertices.size(), sumY / overlapVertices.size());
+    }
+
+    // ==========================================
+    // Helper: Intersection Check
+    // ==========================================
+
+    bool cellIntersectsObstacle(const Cell& cell, const Map& map) {
+        // A robust Box-Polygon intersection check is complex. 
+        // We use a pragmatic approximation suitable for planning:
+        // 1. Check if any Obstacle Vertex is inside the Cell.
+        // 2. Check if the Cell Center is inside any Obstacle.
+        // 3. (Optional but better) Check if Cell corners are in Obstacle.
+        
+        // 1. Check Obstacle Vertices inside Cell
+        for (const auto& obs : map.obstacles.get_obstacles()) {
+            for (const auto& p : obs.get_points()) {
+                Vertex v(p.x, p.y);
+                if (cell.contains(v)) return true;
+            }
+            
+            // 2. Check Cell Vertices inside Obstacle (catches case where cell is fully inside a large obstacle)
+            // We check center and corners
+            Vertex corners[5] = {
+                cell.center,
+                {cell.minX, cell.minY}, {cell.maxX, cell.minY},
+                {cell.maxX, cell.maxY}, {cell.minX, cell.maxY}
+            };
+            
+            for(const auto& c : corners) {
+                if(PlanningUtils::pointInObstacle(c, obs)) return true;
+            }
+        }
+        
+        return false;
+    }
+
+    // ==========================================
+    // Helper: Connectivity
+    // ==========================================
+
+    void connectAdjacentCells(const std::vector<Cell>& cells, std::shared_ptr<Roadmap> roadmap) {
+        // Simple O(N^2) adjacency check.
+        // Two rectangular cells are adjacent if they share a boundary.
+        // We add a tiny epsilon to handle floating point inaccuracies.
+        double eps = 1e-4;
+
+        for (size_t i = 0; i < cells.size(); ++i) {
+            for (size_t j = i + 1; j < cells.size(); ++j) {
+                const Cell& c1 = cells[i];
+                const Cell& c2 = cells[j];
+
+                bool overlapX = (c1.minX < c2.maxX - eps) && (c1.maxX > c2.minX + eps);
+                bool overlapY = (c1.minY < c2.maxY - eps) && (c1.maxY > c2.minY + eps);
+
+                bool touchingX = std::abs(c1.maxX - c2.minX) < eps || std::abs(c1.minX - c2.maxX) < eps;
+                bool touchingY = std::abs(c1.maxY - c2.minY) < eps || std::abs(c1.minY - c2.maxY) < eps;
+
+                // Adjacent if they Overlap in one dimension AND Touch in the other
+                if ((overlapX && touchingY) || (overlapY && touchingX)) {
+                    roadmap->addEdge(i, j, true);
+                }
+            }
+        }
+    }
+
 }
+
+
+
+
+

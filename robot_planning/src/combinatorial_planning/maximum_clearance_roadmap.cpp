@@ -1,7 +1,9 @@
 #include "combinatorial_planning/maximum_clearance_roadmap.h"
-#include <queue>
+#include "combinatorial_planning/planning_utils.h" 
+
+#include <vector>
+#include <map>
 #include <cmath>
-#include <algorithm>
 #include <iostream>
 #include <limits>
 #include "combinatorial_planning/planning_utils.h"
@@ -15,17 +17,17 @@ namespace MaxClearanceRoadmap {
         int sourceObsId;   
         bool isVoronoi;    
         int roadmapNodeIdx;
-        bool isTarget;      // Indica se la cella contiene un target
-        Vertex exactPos;    // Posizione esatta del target (per evitare errori di discretizzazione)
     };
 
     bool isValid(int x, int y, int width, int height) {
         return x >= 0 && x < width && y >= 0 && y < height;
     }
 
-    // --- Thinning Algorithm (Zhang-Suen) ---
-    // Assottiglia le linee mantenendo la connettività
+    // --- NEW: Thinning Algorithm (Zhang-Suen) ---
+    // This erodes the "thick" Voronoi bands into single-pixel lines
     void applyThinning(std::vector<std::vector<PixelInfo>>& grid, int width, int height) {
+        // Neighbors: P2, P3, P4, P5, P6, P7, P8, P9
+        // Coordinates: (0,-1), (1,-1), (1,0), (1,1), (0,1), (-1,1), (-1,0), (-1,-1)
         int dx[] = {0, 1, 1, 1, 0, -1, -1, -1};
         int dy[] = {-1, -1, 0, 1, 1, 1, 0, -1};
 
@@ -34,12 +36,12 @@ namespace MaxClearanceRoadmap {
             pixelRemoved = false;
             std::vector<GridNode> toRemove;
 
+            // Two sub-iterations required by Zhang-Suen
             for (int iter = 0; iter < 2; ++iter) {
                 toRemove.clear();
                 for (int x = 1; x < width - 1; ++x) {
                     for (int y = 1; y < height - 1; ++y) {
-                        // NON rimuovere se non è Voronoi o se è un TARGET
-                        if (!grid[x][y].isVoronoi || grid[x][y].isTarget) continue;
+                        if (!grid[x][y].isVoronoi) continue;
 
                         int p2 = grid[x + dx[0]][y + dy[0]].isVoronoi;
                         int p3 = grid[x + dx[1]][y + dy[1]].isVoronoi;
@@ -73,78 +75,25 @@ namespace MaxClearanceRoadmap {
         }
     }
 
-    // --- Funzione per collegare il Target allo Scheletro (Gradient Ascent) ---
-    void connectTargetToSkeleton(int startX, int startY, int width, int height, std::vector<std::vector<PixelInfo>>& grid) {
-        int cx = startX;
-        int cy = startY;
-        
-        int maxSteps = width * height; // Safety break
-        int steps = 0;
-
-        int dx[] = {1, 1, 0, -1, -1, -1, 0, 1};
-        int dy[] = {0, 1, 1, 1, 0, -1, -1, -1};
-
-        while (steps < maxSteps) {
-            // Se siamo già su un nodo Voronoi preesistente (che non sia il target stesso all'inizio), ci siamo connessi!
-            if (grid[cx][cy].isVoronoi && !grid[cx][cy].isTarget) {
-                break;
-            }
-
-            // Marchiamo il percorso corrente come parte del grafo
-            grid[cx][cy].isVoronoi = true;
-
-            // Cerchiamo il vicino con la distanza maggiore (Gradient Ascent)
-            double maxDist = grid[cx][cy].dist;
-            int bestNx = -1, bestNy = -1;
-
-            for (int i = 0; i < 8; ++i) {
-                int nx = cx + dx[i];
-                int ny = cy + dy[i];
-
-                if (isValid(nx, ny, width, height)) {
-                    // Se troviamo un nodo Voronoi vicino, andiamo subito lì per chiudere il loop
-                    if (grid[nx][ny].isVoronoi && !grid[nx][ny].isTarget) {
-                        bestNx = nx; bestNy = ny;
-                        break; // Priorità alla connessione
-                    }
-
-                    if (grid[nx][ny].dist > maxDist) {
-                        maxDist = grid[nx][ny].dist;
-                        bestNx = nx;
-                        bestNy = ny;
-                    }
-                }
-            }
-
-            if (bestNx != -1) {
-                cx = bestNx;
-                cy = bestNy;
-            } else {
-                // Massimo locale raggiunto. Ci fermiamo qui.
-                break;
-            }
-            steps++;
-        }
-    }
-
     std::shared_ptr<Roadmap> maximumClearanceRoadmap(const Map& map, double gridResolution) {
         auto roadmap = std::make_shared<Roadmap>();
         roadmap->setMap(&map);
 
+        // 1. Determine Grid Dimensions
         double minX, minY, maxX, maxY;
         map.get_bounding_box(minX, minY, maxX, maxY);
-        minX -= 1.0; minY -= 1.0; maxX += 1.0; maxY += 1.0;
+        minX -= 1.0; minY -= 1.0; maxX += 1.0; maxY += 1.0; // Padding
 
         int width = std::ceil((maxX - minX) / gridResolution);
         int height = std::ceil((maxY - minY) / gridResolution);
 
         if (width <= 0 || height <= 0) return roadmap;
 
-        // Inizializzazione Griglia
-        std::vector<std::vector<PixelInfo>> grid(width, std::vector<PixelInfo>(height, {std::numeric_limits<double>::max(), -1, false, -1, false, Vertex(0,0)}));
+        // 2. Initialize Grid
+        std::vector<std::vector<PixelInfo>> grid(width, std::vector<PixelInfo>(height, {std::numeric_limits<double>::max(), -1, false, -1}));
         std::queue<GridNode> q;
 
-        // 1. Brushfire Initialization (Bordi e Ostacoli)
+        // 3. Rasterize Obstacles (Same logic as before)
         for (int x = 0; x < width; ++x) {
             for (int y = 0; y < height; ++y) {
                 Vertex worldPos(minX + x * gridResolution, minY + y * gridResolution);
@@ -158,6 +107,7 @@ namespace MaxClearanceRoadmap {
                     }
                 }
                 
+                // Check borders
                 std::vector<Vertex> borderPoly;
                 for(const auto& p : map.borders.get_points()) borderPoly.push_back(Vertex(p.x, p.y));
                 if (!insideObstacle && !PlanningUtils::pointInPolygon(worldPos, borderPoly)) {
@@ -172,7 +122,7 @@ namespace MaxClearanceRoadmap {
             }
         }
 
-        // 2. Brushfire Propagation
+        // 4. Brushfire (Same logic as before)
         int dx[] = {1, 1, 0, -1, -1, -1, 0, 1};
         int dy[] = {0, 1, 1, 1, 0, -1, -1, -1};
         
@@ -195,90 +145,43 @@ namespace MaxClearanceRoadmap {
                     q.push({nx, ny});
                 } 
                 else if (neighborInfo.sourceObsId != currentInfo.sourceObsId) {
-                    // Confine tra due ostacoli diversi -> Ridge di Voronoi
+                    // Mark candidate ridge pixels
                     currentInfo.isVoronoi = true;
                     neighborInfo.isVoronoi = true; 
                 }
             }
         }
 
-        // 3. Iniezione Targets e Connessione (Gradient Ascent)
-        std::vector<Vertex> targets;
-        targets.push_back(Vertex(map.start.get_position().x, map.start.get_position().y));
-        if (!map.gates.get_gates().empty()) {
-            Point g = map.gates.get_gates()[0].get_position();
-            targets.push_back(Vertex(g.x, g.y));
-        }
-        for (const auto& v : map.victims.get_victims()) {
-            Point p = v.get_center();
-            targets.push_back(Vertex(p.x, p.y));
-        }
-
-        // Lista di celle target per dopo
-        std::vector<GridNode> targetCells;
-
-        for (const auto& t : targets) {
-            int gx = std::round((t.x - minX) / gridResolution);
-            int gy = std::round((t.y - minY) / gridResolution);
-
-            if (isValid(gx, gy, width, height)) {
-                grid[gx][gy].isTarget = true;
-                grid[gx][gy].isVoronoi = true; // Deve essere parte del grafo
-                grid[gx][gy].exactPos = t;     // Salviamo la coordinata float precisa
-                targetCells.push_back({gx, gy});
-            }
-        }
-
-        // Collega ogni target allo scheletro principale risalendo la distanza
-        for (const auto& cell : targetCells) {
-            connectTargetToSkeleton(cell.x, cell.y, width, height, grid);
-        }
-
-        // 4. Thinning (per pulire i ridge spessi, ma preserva la connettività dei target)
+        // --- Apply Thinning ---
         applyThinning(grid, width, height);
 
-        // 5. Estrazione Nodi
-        double minClearance = 1.0 / gridResolution; // Filtro rumore minimo
+
+        // 5. Extract Nodes (With Sparsity Check)
+        double minClearance = 1.0 / gridResolution; 
 
         for (int x = 0; x < width; ++x) {
             for (int y = 0; y < height; ++y) {
-                // Accetta il nodo se è Voronoi E (ha buona clearance OPPURE è un target/percorso target)
-                // Usiamo una soglia di distanza anche per i nodi generici per evitare rumore vicino ai muri
-                if (grid[x][y].isVoronoi) {
-                    bool keep = false;
-                    if (grid[x][y].isTarget) keep = true;
-                    else if (grid[x][y].dist > minClearance) keep = true;
-
-                    if (keep) {
-                        Vertex v;
-                        // SE è un target, usiamo la posizione esatta. ALTRIMENTI usiamo il centro griglia
-                        if (grid[x][y].isTarget) {
-                            v = grid[x][y].exactPos;
-                        } else {
-                            v = Vertex(minX + x * gridResolution, minY + y * gridResolution);
-                        }
-                        grid[x][y].roadmapNodeIdx = roadmap->addVertex(v);
-                    }
+                if (grid[x][y].isVoronoi && grid[x][y].dist > minClearance) {
+                    Vertex v(minX + x * gridResolution, minY + y * gridResolution);
+                    grid[x][y].roadmapNodeIdx = roadmap->addVertex(v);
                 }
             }
         }
 
-        // 6. Connessione Archi
-        // Collega ogni nodo ai suoi vicini (8-connectivity) sulla griglia Voronoi
+        // 6. Connect Neighbors
         for (int x = 0; x < width; ++x) {
             for (int y = 0; y < height; ++y) {
                 int uIdx = grid[x][y].roadmapNodeIdx;
                 if (uIdx == -1) continue;
 
+                // Check 8 neighbors now, as thinning might leave diagonal connections
                 for (int i = 0; i < 8; ++i) {
                     int nx = x + dx[i];
                     int ny = y + dy[i];
 
                     if (isValid(nx, ny, width, height)) {
                         int vIdx = grid[nx][ny].roadmapNodeIdx;
-                        // Aggiungi arco se il vicino è un nodo valido
-                        // Nota: Se ci sono "buchi" di nodi Voronoi (es. rimossi per low clearance),
-                        // la connessione si interrompe. Il Gradient Ascent garantisce che non succeda per i target.
+                        // Avoid self-loops and double edges (check index order)
                         if (vIdx != -1 && uIdx < vIdx) {
                             roadmap->addEdge(uIdx, vIdx, true);
                         }
@@ -286,7 +189,7 @@ namespace MaxClearanceRoadmap {
                 }
             }
         }
-        
+
         return roadmap;
     }
 }
