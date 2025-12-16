@@ -7,7 +7,7 @@ MapBuilder::MapBuilder(ros::NodeHandle& nh, double timeout)
     : nh_(nh), timeout_(timeout) {}
 
 Map MapBuilder::buildMap() {
-    return buildMap("/map_borders", "/odom", "/gates", "/obstacles", "/victims");
+    return buildMap("/map_borders", "limo0/odom", "/gates", "/obstacles", "/victims");
 }
 
 Map MapBuilder::buildMap(const std::string& borders_topic,

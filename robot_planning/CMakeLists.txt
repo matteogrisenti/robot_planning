@@ -18,11 +18,15 @@ find_package(catkin REQUIRED COMPONENTS
 
 find_package(OpenCV REQUIRED)
 
+## Find Eigen3
+find_package(Eigen3 REQUIRED)
+
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES robot_planning
   CATKIN_DEPENDS roscpp rospy std_msgs geometry_msgs obstacles_msgs nav_msgs
   DEPENDS OpenCV
+  DEPENDS Eigen3
 )
 
 # ==============================================================================
@@ -32,6 +36,7 @@ include_directories(
   include
   ${catkin_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
+  ${EIGEN3_INCLUDE_DIRS}
 )
 
 # ==============================================================================
@@ -120,6 +125,32 @@ target_link_libraries(roadmap_test_node
   ${catkin_LIBRARIES}
 )
 add_dependencies(roadmap_test_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+
+
+## Declare a C++ executable
+add_executable(controller_node src/controller.cpp)
+
+## Add dependencies
+add_dependencies(controller_node
+  ${${PROJECT_NAME}_EXPORTED_TARGETS} 
+  ${catkin_EXPORTED_TARGETS}
+)
+
+## Specify libraries to link
+target_link_libraries(controller_node
+  ${catkin_LIBRARIES}
+)
+
+
+
+
+add_executable(dubins_planner_node src/dubins_planner_node.cpp)
+target_link_libraries(dubins_planner_node 
+  ${catkin_LIBRARIES}
+  map_builder
+  dubins_library
+  collision_checker_lib )
+add_dependencies(dubins_planner_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the

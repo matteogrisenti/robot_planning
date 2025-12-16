@@ -122,7 +122,7 @@ Visualization Manager:
           Show Trail: false
           Value: true
       Name: RobotModel
-      Robot Description: robot_description
+      Robot Description: limo0/robot_description
       TF Prefix: ""
       Update Interval: 0
       Value: true
@@ -193,7 +193,7 @@ Visualization Manager:
       Radius: 0.029999999329447746
       Shaft Diameter: 0.10000000149011612
       Shaft Length: 0.10000000149011612
-      Topic: /move_base/NavfnROS/plan
+      Topic: /limo0/move_base/NavfnROS/plan
       Unreliable: false
       Value: true
     - Alpha: 1
@@ -217,7 +217,7 @@ Visualization Manager:
       Radius: 0.029999999329447746
       Shaft Diameter: 0.05000000074505806
       Shaft Length: 0.20000000298023224
-      Topic: /move_base/TebLocalPlannerROS/local_plan
+      Topic: /limo0/move_base/TebLocalPlannerROS/local_plan
       Unreliable: false
       Value: true
     - Alpha: 0.699999988079071
@@ -236,7 +236,7 @@ Visualization Manager:
       Draw Behind: false
       Enabled: true
       Name: Map
-      Topic: /move_base/global_costmap/costmap
+      Topic: /limo0/move_base/global_costmap/costmap
       Unreliable: false
       Use Timestamp: false
       Value: true
@@ -246,7 +246,7 @@ Visualization Manager:
       Draw Behind: false
       Enabled: true
       Name: Map
-      Topic: /move_base/local_costmap/costmap
+      Topic: /limo0/move_base/local_costmap/costmap
       Unreliable: false
       Use Timestamp: false
       Value: true
@@ -292,11 +292,11 @@ Visualization Manager:
     - Class: rviz/Measure
     - Class: rviz/SetInitialPose
       Theta std deviation: 0.2617993950843811
-      Topic: /initialpose
+      Topic: /limo0/initialpose
       X std deviation: 0.5
       Y std deviation: 0.5
     - Class: rviz/SetGoal
-      Topic: /move_base_simple/goal
+      Topic: /limo0/move_base_simple/goal
     - Class: rviz/PublishPoint
       Single click: true
       Topic: /clicked_point
