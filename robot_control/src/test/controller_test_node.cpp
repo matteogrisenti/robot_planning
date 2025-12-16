@@ -1,3 +1,12 @@
+/* This is a test for the Ros Controller Node.
+    * PREPARATORIAL WORK:
+    * It read the odom of the robot, and the gates from the map,
+    * It use the dubinsa_planner to compute the dubins path
+    * TEST EXECUTION:
+    * It publish the reference commands to the controller
+    * 
+*/
+
 #include <ros/ros.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <nav_msgs/Odometry.h>
@@ -17,13 +26,13 @@
 extern bool DEBUG;
 extern int no_of_samples;
 
-class DubinsReferenceNode {
+class ControlTestNode {
 private:
     ros::NodeHandle nh;
-    ros::Publisher pub_ref;
-    ros::Subscriber sub_odom;
+    ros::Publisher pub_ref;     // Publisher for reference commands
+    ros::Subscriber sub_odom;   // Subscriber for odometry
 
-    std::string robot_name;
+    std::string robot_name; 
 
     // State Variables
     double robot_x, robot_y, robot_theta;
@@ -44,15 +53,15 @@ private:
     double goal_theta;
 
 public:
-    DubinsReferenceNode() {
+    ControlTestNode() {
         // 1. Get Parameters
         ros::NodeHandle private_nh("~");
         private_nh.param<std::string>("robot_name", robot_name, "limo0");
         
         // 2. Setup Communication
-        // Publishes to the topic controller.py listens to: /{robot_name}/ref
+        // Publishes to the topic ros_controller_node listens to: /{robot_name}/ref
         pub_ref = nh.advertise<robot_control::Reference>("/" + robot_name + "/ref", 1);
-        sub_odom = nh.subscribe("/" + robot_name + "/odom", 1, &DubinsReferenceNode::odomCallback, this);
+        sub_odom = nh.subscribe("/" + robot_name + "/odom", 1, &ControlTestNode::odomCallback, this);
 
         ROS_INFO("DubinsReferenceNode started for %s. Waiting for Odom...", robot_name.c_str());
 
@@ -199,9 +208,9 @@ public:
 };
 
 int main(int argc, char** argv) {
-    ros::init(argc, argv, "dubins_reference_node");
+    ros::init(argc, argv, "controller_test_node");
     
-    DubinsReferenceNode node;
+    ControlTestNode node;
 
     // Run at high frequency to give smooth references to the controller
     ros::Rate r(50); // 50 Hz

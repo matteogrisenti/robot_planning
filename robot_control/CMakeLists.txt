@@ -110,7 +110,7 @@ generate_messages(
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-#  INCLUDE_DIRS include
+  INCLUDE_DIRS include
 #  LIBRARIES robot_control
   CATKIN_DEPENDS geometry_msgs nav_msgs roscpp std_msgs tf2_ros message_runtime
   DEPENDS Eigen3
@@ -132,6 +132,10 @@ include_directories(
 # add_library(${PROJECT_NAME}
 #   src/${PROJECT_NAME}/robot_control.cpp
 # )
+add_library(ros_controller_lib 
+  src/lyapunov_controller.cpp
+  src/ros_controller_node.cpp
+)
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
@@ -150,21 +154,22 @@ include_directories(
 # set_target_properties(${PROJECT_NAME}_node PROPERTIES OUTPUT_NAME node PREFIX "")
 
 
-add_executable(controller_node src/controller.cpp)
-add_dependencies(controller_node robot_control_generate_messages_cpp)
-target_link_libraries(controller_node
+add_executable(main src/main.cpp)
+add_dependencies(main robot_control_generate_messages_cpp)
+target_link_libraries(main
   ${catkin_LIBRARIES}
   ${Eigen3_LIBRARIES}
+  ros_controller_lib
 )
 
 
-add_executable(dubins_planner_node src/dubins_planner_node.cpp)
-target_link_libraries(dubins_planner_node 
+add_executable(controller_test_node src/test/controller_test_node.cpp)
+target_link_libraries(controller_test_node 
   ${catkin_LIBRARIES}
   map_builder
   dubins_library
   collision_checker_lib )
-add_dependencies(dubins_planner_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(controller_test_node robot_control_generate_messages_cpp)
 
 
 ## Add cmake target dependencies of the executable

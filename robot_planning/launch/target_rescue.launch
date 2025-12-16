@@ -72,7 +72,7 @@
     </group>
 
     <!-- Controller Node -->
-    <node pkg="robot_control" type="controller_node" name="limo0_controller" output="screen">
+    <node pkg="robot_control" type="main" name="limo0_controller" output="screen">
         <param name="robot_id" value="$(arg robot_id)"/>
         <param name="debug" value="true"/>
     </node>
