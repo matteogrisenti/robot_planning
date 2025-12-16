@@ -2,15 +2,15 @@
     * PREPARATORIAL WORK:
     * It read the odom of the robot, and the gates from the map,
     * It use the dubinsa_planner to compute the dubins path
+    * It devide the dubins path in reference points,
     * TEST EXECUTION:
     * It publish the reference commands to the controller
-    * 
 */
 
 #include <ros/ros.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <nav_msgs/Odometry.h>
-#include <tf/tf.h> 
+#include <tf/tf.h>
 
 // Include your custom message for the controller
 #include <robot_control/Reference.h>
