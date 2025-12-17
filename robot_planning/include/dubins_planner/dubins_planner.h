@@ -12,6 +12,8 @@
 
 class DubinsPlanner {
 public:
+
+    DubinsPlanner();
     /**
      * @brief Constructor
      * @param nh NodeHandle for publishers

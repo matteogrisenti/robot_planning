@@ -1,5 +1,13 @@
 #include "dubins_planner/dubins_planner.h"
 
+DubinsPlanner::DubinsPlanner()
+    : nh_("~"), 
+      plan_valid_(false),
+      is_executing_(false)
+{
+    // Default constructor (no publishers)
+}
+
 DubinsPlanner::DubinsPlanner(ros::NodeHandle& nh, std::string robot_name, double robot_radius, double safety_margin)
     : nh_(nh), 
       collision_checker_(robot_radius, safety_margin),
