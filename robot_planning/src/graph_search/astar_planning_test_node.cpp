@@ -13,6 +13,7 @@
 #include "combinatorial_planning/exact_cell_decomposition.h"
 #include "combinatorial_planning/approximate_cell_decomposition.h"
 #include "combinatorial_planning/maximum_clearance_roadmap.h"
+#include "combinatorial_planning/shortest_path_roadmap.h"
 #include "sample_based_planning/prm.h"
 #include "sample_based_planning/rrt.h"
 #include "sample_based_planning/rrt_star.h"
@@ -38,9 +39,10 @@ shared_ptr<Roadmap> generateRoadmap(const string& type, const Map& map) {
         config.k_neighbors = 15;
         return sample_planning::buildPRM(map, config);
     } 
-    else if (type == "ecd") return ExactDecomposition::exactCellDecomposition(map);
-    else if (type == "acd") return ApproximateDecomposition::approximateCellDecomposition(map, 4);
-    else if (type == "mcr") return MaxClearanceRoadmap::maximumClearanceRoadmap(map);
+    else if (type == "ecd") return exactCellDecomposition(map);
+    else if (type == "acd") return approximateCellDecomposition(map, 4);
+    else if (type == "mcr") return maximumClearanceRoadmap(map);
+    else if (type == "spr") return shortestPathRoadmap(map, 0.0);
     else if (type == "rrt") {
         sample_planning::RRTConfig config; 
         config.max_iterations = 3000; 

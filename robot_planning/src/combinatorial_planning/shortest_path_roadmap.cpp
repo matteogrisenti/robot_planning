@@ -17,7 +17,7 @@ double crossProduct(const Point& a, const Point& b, const Point& c) {
 
 
 
-std::shared_ptr<Roadmap> generateShortestPathRoadmap(const Map& map, const double padding) {
+std::shared_ptr<Roadmap> shortestPathRoadmap(const Map& map, const double padding) {
     std::shared_ptr<Roadmap> roadmap = std::make_shared<Roadmap>();
     roadmap->setMap(&map);
 

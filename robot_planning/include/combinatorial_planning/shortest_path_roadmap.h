@@ -11,7 +11,7 @@
  * @param padding Optional padding distance to inflate obstacles.
  * @return Roadmap A populated roadmap containing the visibility graph.
  */
-std::shared_ptr<Roadmap> generateShortestPathRoadmap(const Map& map, const double padding = 0.0);
+std::shared_ptr<Roadmap> shortestPathRoadmap(const Map& map, const double padding = 0.0);
 
 
 std::vector<Point> applyPaddingToPolygon(const std::vector<Point>& poly, double padding = 0.0);

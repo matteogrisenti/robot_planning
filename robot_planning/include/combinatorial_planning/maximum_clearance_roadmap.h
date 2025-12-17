@@ -12,7 +12,7 @@
  * * @param map Pointer or reference to the loaded Map.
  * @return Roadmap A populated Roadmap structure containing the graph.
  */
-std::shared_ptr<Roadmap>  generateMaxClearanceRoadmap(const Map& map);
+std::shared_ptr<Roadmap>  maximumClearanceRoadmap(const Map& map);
 
 
 namespace HelperMaxClearanceRoadmap {

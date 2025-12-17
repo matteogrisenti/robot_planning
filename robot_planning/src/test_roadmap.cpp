@@ -12,6 +12,7 @@
 #include "combinatorial_planning/exact_cell_decomposition.h"
 #include "combinatorial_planning/approximate_cell_decomposition.h"
 #include "combinatorial_planning/maximum_clearance_roadmap.h"
+#include "combinatorial_planning/shortest_path_roadmap.h"
 
 // Algoritmi Sample-Based
 #include "sample_based_planning/prm.h"
@@ -31,13 +32,12 @@ int main(int argc, char **argv)
         // A. BUILD ENVIRONMENT (Map) - Eseguito una sola volta
         // ---------------------------------------------------------
         ROS_INFO("1. Waiting for Map Data...");
-        // Timeout 10s. Assicurati che la simulazione stia pubblicando i topic!
-        map_builder::MapBuilder builder(nh, 100.0);
+        map_builder::MapBuilder builder(nh, 1000.0);
         Map map = builder.buildMap();
 
         // Percorsi di output basati sui file originali (Notare l'incoerenza dei path originali mantenuta)
-        std::string combinatorial_base_path = "src/robot_planning/robot_planning/src/combinatorial_planning/test/";
-        std::string sample_base_path = "src/robot_planning/robot_planning/src/sample_based_planning/test/";
+        std::string combinatorial_base_path = "src/robot_planning/src/combinatorial_planning/test/";
+        std::string sample_base_path = "src/robot_planning/src/sample_based_planning/test/";
 
         ROS_INFO("Map built successfully.");
         
@@ -53,7 +53,7 @@ int main(int argc, char **argv)
         // Test 1.1: Exact Cell Decomposition
         {
             ROS_INFO("--- Test 1.1: Exact Cell Decomposition ---");
-            std::shared_ptr<Roadmap> ECD_roadmap = ExactDecomposition::exactCellDecomposition(map);
+            std::shared_ptr<Roadmap> ECD_roadmap = exactCellDecomposition(map);
 
             if (ECD_roadmap) {
                 std::string output_file = combinatorial_base_path + "ECD_roadmap_approx.png";
@@ -67,8 +67,7 @@ int main(int argc, char **argv)
         // Test 1.2: Approximate Cell Decomposition
         {
             ROS_INFO("--- Test 1.2: Approximate Cell Decomposition ---");
-            // Profondità ricorsiva impostata a 5 come nel file originale
-            std::shared_ptr<Roadmap> ACD_roadmap = ApproximateDecomposition::approximateCellDecomposition(map, 5);
+            std::shared_ptr<Roadmap> ACD_roadmap = approximateCellDecomposition(map, 5);
 
             if (ACD_roadmap) {
                 std::string output_file = combinatorial_base_path + "ACD_roadmap_approx.png";
@@ -82,7 +81,7 @@ int main(int argc, char **argv)
         // Test 1.3: Maximum Clearance Roadmap
         {
             ROS_INFO("--- Test 1.3: Maximum Clearance Roadmap ---");
-            std::shared_ptr<Roadmap> MCR_roadmap = MaxClearanceRoadmap::maximumClearanceRoadmap(map);
+            std::shared_ptr<Roadmap> MCR_roadmap = maximumClearanceRoadmap(map);
 
             if (MCR_roadmap) {
                 std::string output_file = combinatorial_base_path + "MCR_roadmap_approx.png";
@@ -90,6 +89,21 @@ int main(int argc, char **argv)
                 ROS_INFO("Saved: %s", output_file.c_str());
             } else {
                 ROS_WARN("MCR Roadmap generation failed.");
+            }
+        }
+
+        // Test 1.4: Shortest Path Roadmap
+        {
+            ROS_INFO("--- Test 1.4: Shortest Path Roadmap ---");
+            double padding = 0.1; // Padding di 0.1 unità
+            std::shared_ptr<Roadmap> SPR_roadmap = shortestPathRoadmap(map, padding);
+
+            if (SPR_roadmap) {
+                std::string output_file = combinatorial_base_path + "SPR_roadmap_approx.png";
+                SPR_roadmap->plot(false, true, output_file);
+                ROS_INFO("Saved: %s", output_file.c_str());
+            } else {
+                ROS_WARN("SPR Roadmap generation failed.");
             }
         }
 
@@ -124,7 +138,6 @@ int main(int argc, char **argv)
             config.max_iterations = 2000;
             config.step_size = 1.0;
             
-            // Setup Goal (usiamo il primo gate se presente)
             if (!map.gates.get_gates().empty()) {
                 Point g = map.gates.get_gates()[0].get_position();
                 config.goal_point = Vertex(g.x, g.y);

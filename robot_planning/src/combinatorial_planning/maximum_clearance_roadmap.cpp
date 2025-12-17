@@ -49,7 +49,7 @@ struct segment_traits<HelperMaxClearanceRoadmap::SegmentInt> {
 
 
 
-std::shared_ptr<Roadmap> generateMaxClearanceRoadmap(const Map& map) {
+std::shared_ptr<Roadmap> maximumClearanceRoadmap(const Map& map) {
     std::shared_ptr<Roadmap> roadmap = std::make_shared<Roadmap>();
     roadmap->setMap(&map); 
 

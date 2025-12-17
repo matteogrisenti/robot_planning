@@ -73,7 +73,7 @@ int main(int argc, char **argv)
             ROS_INFO("\n--- Test 3: Maximum Clearance Roadmap ---");
             
             std::shared_ptr<Roadmap> MCR_roadmap;
-            MCR_roadmap = generateMaxClearanceRoadmap(map);
+            MCR_roadmap = maximumClearanceRoadmap(map);
             
             if (!MCR_roadmap) {
                 ROS_WARN("[RoadmapTest] Cannot visualize null roadmap");
@@ -92,7 +92,7 @@ int main(int argc, char **argv)
             ROS_INFO("\n--- Test 4: Shortest Path Roadmap ---");
             
             std::shared_ptr<Roadmap> SPR_roadmap;
-            SPR_roadmap = generateShortestPathRoadmap(map, 0.2); // Example padding of 0.2 units
+            SPR_roadmap = shortestPathRoadmap(map, 0.2); // Example padding of 0.2 units
 
             if (!SPR_roadmap) {
                 ROS_WARN("[RoadmapTest] Cannot visualize null roadmap");

@@ -32,11 +32,11 @@ int main(int argc, char **argv)
         // A. BUILD ENVIRONMENT (Map)
         // ---------------------------------------------------------
         ROS_INFO("1. Waiting for Map Data...");
-        map_builder::MapBuilder builder(nh, 100.0); 
+        map_builder::MapBuilder builder(nh, 1000.0); 
         Map map = builder.buildMap();
         
         // Define base output directory for tests
-        std::string image_output_dir = "src/robot_planning/robot_planning/src/sample_based_planning/test/map.png";
+        std::string image_output_dir = "src/robot_planning/src/sample_based_planning/test/map.png";
         ROS_INFO("Map built successfully. Saving base map image...");
         map.plot(false, true, image_output_dir);
 
@@ -61,7 +61,7 @@ int main(int argc, char **argv)
             time_prm = std::chrono::duration<double>(end - start).count();
 
             if (prm_roadmap && prm_roadmap->getNumVertices() > 0) {
-                std::string output_file = "src/robot_planning/robot_planning/src/sample_based_planning/test/prm.png";
+                std::string output_file = "src/robot_planning/src/sample_based_planning/test/prm.png";
                 ROS_INFO("PRM generated with %d vertices in %.4f s. Saving...", 
                          prm_roadmap->getNumVertices(), time_prm);
                 prm_roadmap->plot(false, true, output_file);
@@ -96,7 +96,7 @@ int main(int argc, char **argv)
             time_rrt = std::chrono::duration<double>(end - start).count();
 
             if (rrt) {
-                std::string output_file = "src/robot_planning/robot_planning/src/sample_based_planning/test/rrt.png";
+                std::string output_file = "src/robot_planning/src/sample_based_planning/test/rrt.png";
                 ROS_INFO("RRT generated in %.4f s. Saving...", time_rrt);
                 rrt->plot(false, true, output_file);
             }
@@ -128,7 +128,7 @@ int main(int argc, char **argv)
             time_rrt_star = std::chrono::duration<double>(end - start).count();
 
             if (rrt_star) {
-                std::string output_file = "src/robot_planning/robot_planning/src/sample_based_planning/test/rrt_star.png";
+                std::string output_file = "src/robot_planning/src/sample_based_planning/test/rrt_star.png";
                 ROS_INFO("RRT* generated in %.4f s. Saving...", time_rrt_star);
                 rrt_star->plot(false, true, output_file);
             }
