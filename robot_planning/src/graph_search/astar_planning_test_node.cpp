@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
 
     // Lista di tutti i planner da testare
     vector<string> planner_types = {
-        "prm", "rrt", "rrt_star", "ecd", "acd", "mcr"
+        "prm", "rrt", "rrt_star", "ecd", "acd", "mcr", "spr"
     };
     
     vector<BenchmarkResult> report;
@@ -147,8 +147,8 @@ int main(int argc, char **argv) {
                 viz.drawPath(*roadmap, fullGlobalPath);
                 
                 // Crea cartella se non esiste
-                string output_dir = "src/robot_planning/robot_planning/src/graph_search/test/";
-                system(("mkdir -p " + output_dir).c_str());
+                string output_dir = "src/robot_planning/src/graph_search/test/";
+                // system(("mkdir -p " + output_dir).c_str());
                 
                 // Nome file univoco per ogni planner
                 string filename = output_dir + "mission_" + planner_type + ".png";
