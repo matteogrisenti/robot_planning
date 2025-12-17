@@ -1,107 +1,112 @@
-/* This is a test for the Ros Controller Node.
-    * PREPARATORIAL WORK:
-    * It read the odom of the robot, and the gates from the map,
-    * It use the dubinsa_planner to compute the dubins path
-    * It devide the dubins path in reference points,
-    * TEST EXECUTION:
-    * It publish the reference commands to the controller
-*/
+/**
+ * @file controller_test_node.cpp
+ * @brief Orchestrator node that uses DubinsPlanner to drive the robot to a gate.
+ * * RESPONSIBILITIES:
+ * 1. Load the Map and find the Goal (Gate).
+ * 2. Wait for the Robot's initial Odometry.
+ * 3. Invoke DubinsPlanner to plan and execute the trajectory.
+ * * TESTING:
+ * 4. Test the controller logic in a simulated environment.
+ */
 
 #include <ros/ros.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <nav_msgs/Odometry.h>
 #include <tf/tf.h>
 
-// Include your custom message for the controller
-#include <robot_control/Reference.h>
-
-// Include your map and dubins libraries
+// Include the Planner
+#include "dubins_planner/dubins_planner.h"
 #include "map/map_builder.h"
-#include "dubins_planner/dubins_trajectory.h"
 
-// --- Global Variables Required by dubins_trajectory.cpp ---
-// These are necessary because the provided dubins library relies on them.
-// We define them here if they are externs, or rely on the linked cpp.
-// Based on your file, they are defined in dubins_trajectory.cpp, so we just declare usage.
-extern bool DEBUG;
-extern int no_of_samples;
+// --- LEGACY GLOBAL VARIABLES (Required for linking dubins_trajectory library) ---
+// These define the state for the C-style library functions
+bool DEBUG = false;
+long double X0, Y0, Th0, Xf, Yf, Thf, Kmax;
+int pidx;
+int no_waypts, step, no_of_samples;
+long double angle_step;
+dubinscurve_out dubin_curve;
+point init_pt, final_pt;
+std::vector<point> best_path;
+// --------------------------------------------------------------------------------
 
 class ControlTestNode {
 private:
-    ros::NodeHandle nh;
-    ros::Publisher pub_ref;     // Publisher for reference commands
-    ros::Subscriber sub_odom;   // Subscriber for odometry
+    ros::NodeHandle nh_;
+    ros::Subscriber sub_odom_;
 
-    std::string robot_name; 
+    // The Planner Object (Handles logic, collision, and publishing)
+    DubinsPlanner planner_;
+
+    std::string robot_name_; 
 
     // State Variables
-    double robot_x, robot_y, robot_theta;
-    bool odom_received = false;
-    bool path_calculated = false;
-    bool goal_reached = false;
+    bool odom_received_ = false;
+    bool plan_started_ = false;
 
-    // Dubins Path Data
-    dubinscurve_out curve;
-    double total_length;
-    
-    // Timing and Execution
-    ros::Time start_time;
-    double TARGET_SPEED = 0.5; // m/s
-    
     // Goal Data
-    Point goal_pos;
-    double goal_theta;
+    Point goal_pos_;
+    double goal_theta_;
+    double target_speed_ = 0.5; // m/s
+    double min_turning_radius_ = 0.5; // meters
 
 public:
-    ControlTestNode() {
+    ControlTestNode() 
+        : nh_("~"),
+          // Initialize Planner with robot name, radius (0.25), and safety margin (0.05)
+          planner_(nh_, "limo0", 0.25, 0.05) 
+    {
         // 1. Get Parameters
-        ros::NodeHandle private_nh("~");
-        private_nh.param<std::string>("robot_name", robot_name, "limo0");
+        nh_.param<std::string>("robot_name", robot_name_, "limo0");
         
         // 2. Setup Communication
-        // Publishes to the topic ros_controller_node listens to: /{robot_name}/ref
-        pub_ref = nh.advertise<robot_control::Reference>("/" + robot_name + "/ref", 1);
-        sub_odom = nh.subscribe("/" + robot_name + "/odom", 1, &ControlTestNode::odomCallback, this);
+        // We only listen to Odom to know WHERE TO START.
+        // The Planner handles publishing references to /limo0/ref internally.
+        sub_odom_ = nh_.subscribe("/" + robot_name_ + "/odom", 1, &ControlTestNode::odomCallback, this);
 
-        ROS_INFO("DubinsReferenceNode started for %s. Waiting for Odom...", robot_name.c_str());
+        ROS_INFO("[ControlTestNode] Started for %s. Waiting for Odom...", robot_name_.c_str());
 
         // 3. Load Map and Set Goal
-        loadMap();
+        loadMapAndConfigurePlanner();
     }
 
-    void loadMap() {
-        ROS_INFO("Loading Map to find Goal...");
-        map_builder::MapBuilder builder(nh, 100.0);
-        Map map_ = builder.buildMap();
-        const auto& all_gates = map_.gates.get_gates();
+    void loadMapAndConfigurePlanner() {
+        ROS_INFO("[ControlTestNode] Loading Map...");
+        
+        // Build Map
+        map_builder::MapBuilder builder(nh_, 100.0);
+        Map map = builder.buildMap();
+        
+        // Pass map to planner for collision checking
+        planner_.setMap(map);
 
+        // Find Goal (First Gate)
+        const auto& all_gates = map.gates.get_gates();
         if (!all_gates.empty()) {
-            goal_pos = all_gates[0].get_position();
+            goal_pos_ = all_gates[0].get_position();
             
             // Calculate orientation: perpendicular to the gate
             const Orientation& o = all_gates[0].get_orientation();
             // Convert Quat to Yaw
             double roll, pitch;
             tf::Quaternion q(o.x, o.y, o.z, o.w);
-            tf::Matrix3x3(q).getRPY(roll, pitch, goal_theta);
+            tf::Matrix3x3(q).getRPY(roll, pitch, goal_theta_);
             
-            ROS_INFO("Goal set to Gate: [x: %.2f, y: %.2f, th: %.2f]", goal_pos.x, goal_pos.y, goal_theta);
+            ROS_INFO("[ControlTestNode] Goal set to Gate: [x: %.2f, y: %.2f, th: %.2f]", 
+                     goal_pos_.x, goal_pos_.y, goal_theta_);
         } else {
-            ROS_WARN("No gates found! Defaulting to (2.0, 0.0)");
-            goal_pos = {2.0, 0.0, 0.0};
-            goal_theta = 0.0;
+            ROS_WARN("[ControlTestNode] No gates found! Defaulting to (2.0, 0.0)");
+            goal_pos_ = {2.0, 0.0, 0.0};
+            goal_theta_ = 0.0;
         }
     }
 
     void odomCallback(const nav_msgs::Odometry::ConstPtr& msg) {
-        // We only really need odom ONCE to calculate the start path.
-        // After that, we just execute the plan blindly (Open Loop Reference).
-        // The controller handles the closed-loop error correction.
-        
-        if (path_calculated) return; // Stop updating start pose once we are moving
+        // We only need the initial pose to plan the path once.
+        if (plan_started_) return;
 
-        robot_x = msg->pose.pose.position.x;
-        robot_y = msg->pose.pose.position.y;
+        double robot_x = msg->pose.pose.position.x;
+        double robot_y = msg->pose.pose.position.y;
 
         tf::Quaternion q(
             msg->pose.pose.orientation.x,
@@ -109,101 +114,44 @@ public:
             msg->pose.pose.orientation.z,
             msg->pose.pose.orientation.w);
         tf::Matrix3x3 m(q);
-        double roll, pitch;
+        double roll, pitch, robot_theta;
         m.getRPY(roll, pitch, robot_theta);
 
-        if (!odom_received) {
-            ROS_INFO("Initial Odom Received: [%.2f, %.2f, %.2f]", robot_x, robot_y, robot_theta);
-            odom_received = true;
-            calculatePath();
+        if (!odom_received_) {
+            ROS_INFO("[ControlTestNode] Initial Odom Received: [%.2f, %.2f, %.2f]", 
+                     robot_x, robot_y, robot_theta);
+            odom_received_ = true;
+            
+            triggerPlanning(robot_x, robot_y, robot_theta);
         }
     }
 
-    void calculatePath() {
-        if (!odom_received) return;
-
-        double rho = 0.5; // Min turning radius (adjust based on Limo capabilities)
-        int best_idx = -1;
-
-        ROS_INFO("Calculating Dubins Path...");
-        dubins_shortest_path(robot_x, robot_y, robot_theta, 
-                             goal_pos.x, goal_pos.y, goal_theta, 
-                             1.0/rho, best_idx, &curve);
-
-        if (best_idx >= 0) {
-            path_calculated = true;
-            total_length = curve.L;
-            start_time = ros::Time::now();
-            ROS_INFO("Path Calculated! Length: %.2f meters. Starting Execution.", total_length);
-        } else {
-            ROS_ERROR("Failed to find a valid Dubins path!");
-        }
-    }
-
-    void updateLoop() {
-        if (!path_calculated) return;
-        if (goal_reached) return;
-
-        // 1. Calculate time elapsed
-        ros::Duration dt = ros::Time::now() - start_time;
-        double t_sec = dt.toSec();
-
-        // 2. Determine current distance on path
-        double current_dist = t_sec * TARGET_SPEED;
-
-        // 3. Define Segment Lengths
-        double l1 = curve.a1.l;
-        double l2 = curve.a2.l;
-        double l3 = curve.a3.l;
-
-        // 4. Check if finished
-        if (current_dist >= (l1 + l2 + l3)) {
-            ROS_INFO("Trajectory Finished.");
-            publishReference(curve.a3.xf, curve.a3.yf, curve.a3.thf, 0.0, 0.0, true);
-            goal_reached = true;
-            return;
-        }
-
-        // 5. Find which segment we are on and calculate State
-        dubinsarc_out* target_arc = nullptr;
-        double s_segment = 0.0; // Distance within the current segment
-
-        if (current_dist < l1) {
-            // Segment 1
-            target_arc = &curve.a1;
-            s_segment = current_dist;
-        } else if (current_dist < (l1 + l2)) {
-            // Segment 2
-            target_arc = &curve.a2;
-            s_segment = current_dist - l1;
-        } else {
-            // Segment 3
-            target_arc = &curve.a3;
-            s_segment = current_dist - (l1 + l2);
-        }
-
-        // 6. Calculate desired point (x,y,theta) using library function
-        long double ref_x, ref_y, ref_th;
-        circline(s_segment, target_arc->x0, target_arc->y0, target_arc->th0, target_arc->k, ref_x, ref_y, ref_th);
-
-        // 7. Calculate desired velocities (Feedforward)
-        double ref_v = TARGET_SPEED;
-        double ref_omega = target_arc->k * TARGET_SPEED; // omega = k * v
-
-        // 8. Publish
-        publishReference((double)ref_x, (double)ref_y, (double)ref_th, ref_v, ref_omega, false);
-    }
-
-    void publishReference(double x, double y, double th, double v, double w, bool finished) {
-        robot_control::Reference ref_msg;
-        ref_msg.x_d = x;
-        ref_msg.y_d = y;
-        ref_msg.theta_d = th;
-        ref_msg.v_d = v;
-        ref_msg.omega_d = w;
-        ref_msg.plan_finished = finished;
+    void triggerPlanning(double start_x, double start_y, double start_th) {
+        ROS_INFO("[ControlTestNode] Requesting Plan...");
         
-        pub_ref.publish(ref_msg);
+        // 1. Plan the Path
+        // This calculates geometry AND checks collisions
+        bool success = planner_.planPath(start_x, start_y, start_th, 
+                                         goal_pos_.x, goal_pos_.y, goal_theta_, 
+                                         min_turning_radius_);
+
+        if (success) {
+            ROS_INFO("[ControlTestNode] Plan Successful! Starting Execution...");
+            // 2. Start Execution (Planner will begin publishing refs)
+            planner_.startExecution(target_speed_);
+            plan_started_ = true;
+        } else {
+            ROS_ERROR("[ControlTestNode] Planning Failed! (Collision or Geometric issue). Retrying on next odom update...");
+            // plan_started_ remains false, so we will try again next callback
+        }
+    }
+
+    // Main loop function called from main()
+    void update() {
+        // The planner needs to be spun to publish the time-varying reference
+        if (plan_started_) {
+            planner_.spin();
+        }
     }
 };
 
@@ -212,11 +160,11 @@ int main(int argc, char** argv) {
     
     ControlTestNode node;
 
-    // Run at high frequency to give smooth references to the controller
-    ros::Rate r(50); // 50 Hz
+    // Run at high frequency (50Hz) to ensure smooth reference publishing
+    ros::Rate r(50); 
     while (ros::ok()) {
         ros::spinOnce();
-        node.updateLoop();
+        node.update(); // Drives the planner execution
         r.sleep();
     }
 
