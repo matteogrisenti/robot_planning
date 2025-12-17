@@ -35,6 +35,7 @@ struct PolygonObstacle {
 // --- Classe Collision Checker ---
 class CollisionChecker {
 public:
+    CollisionChecker() = default;
     /**
      * @brief Costruttore. Configura le dimensioni fisse del robot.
      * @param robot_radius Raggio fisico del robot.
