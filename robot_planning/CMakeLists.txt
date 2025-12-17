@@ -70,8 +70,13 @@ target_link_libraries(roadmap_visualization
 
 
 # Library to menage the DUblins Trajectory
-add_library(dubins_library src/dubins_trajectory.cpp)
-add_library(collision_checker_lib src/collision_checker.cpp)
+add_library(dubins_library 
+  src/dubins_planner/dubins_planner.cpp
+  src/dubins_planner/dubins_trajectory.cpp
+  src/dubins_planner/collision_checker.cpp
+)
+
+
 
 
 # Library for combinatorial planning 
@@ -99,15 +104,14 @@ target_link_libraries(maximum_clearance_roadmap
 # ==============================================================================
 
 # --- Data Verifier Node ---
-add_executable(data_verifier_node src/data_verifier_node.cpp)
-target_link_libraries(data_verifier_node 
+add_executable(dubins_planner_test_node src/dubins_planner/dubins_planner_test.cpp)
+target_link_libraries(dubins_planner_test_node 
   ${catkin_LIBRARIES} 
   ${OpenCV_LIBRARIES}
   map_builder
   dubins_library
-  collision_checker_lib
 )
-add_dependencies(data_verifier_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(dubins_planner_test_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 # Test node
 add_executable(roadmap_test_node src/combinatorial_planning/roadmap_test_node.cpp )

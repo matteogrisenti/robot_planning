@@ -168,7 +168,7 @@ target_link_libraries(controller_test_node
   ${catkin_LIBRARIES}
   map_builder
   dubins_library
-  collision_checker_lib )
+)
 add_dependencies(controller_test_node robot_control_generate_messages_cpp)
 
 

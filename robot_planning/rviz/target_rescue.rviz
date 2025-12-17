@@ -38,11 +38,10 @@ Visualization Manager:
   Displays:
     - Class: rviz/MarkerArray
       Enabled: true
-      Marker Topic: /verifier/debug_markers
-      Name: DebugPathAndObs
+      Marker Topic: /limo0/planner_debug
+      Name: PlannerDebug
       Namespaces:
-        debug_obs: true
-        debug_path: true
+        dubins_plan: true
       Queue Size: 100
       Value: true
     - Alpha: 0.5
