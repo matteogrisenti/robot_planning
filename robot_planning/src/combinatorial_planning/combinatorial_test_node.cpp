@@ -5,6 +5,7 @@
 #include "combinatorial_planning/exact_cell_decomposition.h"
 #include "combinatorial_planning/approximate_cell_decomposition.h"
 #include "combinatorial_planning/maximum_clearance_roadmap.h"
+#include "combinatorial_planning/shortest_path_roadmap.h"
 
 /**
  * @brief Test node for experimenting with different roadmap algorithms
@@ -31,11 +32,11 @@ int main(int argc, char **argv)
         
         ROS_INFO("=== Testing Different Algorithms ===");
         
-        // Test 1: Maximum Clearance Roadmap
+        // Test 1: Exact Cell Decomposition
         {
             ROS_INFO("\n--- Test 1: Exact Cell Decomposition ---");
             std::shared_ptr<Roadmap> ECD_roadmap; 
-            ECD_roadmap = ExactDecomposition::exactCellDecomposition(map);
+            ECD_roadmap = exactCellDecomposition(map);
 
             if (!ECD_roadmap) {
                 ROS_WARN("[RoadmapTest] Cannot visualize null roadmap");
@@ -48,12 +49,12 @@ int main(int argc, char **argv)
             std::string output_file = "src/robot_planning/src/combinatorial_planning/test/ECD_roadmap_approx.png";
             ECD_roadmap->plot(false, true, output_file);
         }
-        
-        // Test 2: Exact Cell Decomposition
+
+        // Test 2: Approximate Cell Decomposition
         {
             ROS_INFO("\n--- Test 2: Approximate Cell Decomposition ---");
             std::shared_ptr<Roadmap> ACD_roadmap; 
-            ACD_roadmap = ApproximateDecomposition::approximateCellDecomposition(map, 5);
+            ACD_roadmap = approximateCellDecomposition(map, 5);
 
             if (!ACD_roadmap) {
                 ROS_WARN("[RoadmapTest] Cannot visualize null roadmap");
@@ -67,12 +68,13 @@ int main(int argc, char **argv)
             ACD_roadmap->plot(false, true, output_file);
         }
         
-        // Test 3: Approximate Cell Decomposition (different grid sizes)
+        // Test 3: Maximum Clearance Roadmap (Voronoi)
         {
-            ROS_INFO("\n--- Test 3: Approximate Cell Decomposition");
-            std::shared_ptr<Roadmap> MCR_roadmap; 
-            MCR_roadmap = MaxClearanceRoadmap::maximumClearanceRoadmap(map);
-
+            ROS_INFO("\n--- Test 3: Maximum Clearance Roadmap ---");
+            
+            std::shared_ptr<Roadmap> MCR_roadmap;
+            MCR_roadmap = generateMaxClearanceRoadmap(map);
+            
             if (!MCR_roadmap) {
                 ROS_WARN("[RoadmapTest] Cannot visualize null roadmap");
                 return 1;
@@ -84,7 +86,26 @@ int main(int argc, char **argv)
             std::string output_file = "src/robot_planning/src/combinatorial_planning/test/MCR_roadmap_approx.png";
             MCR_roadmap->plot(false, true, output_file);
         }
-        
+
+        // Test 4: Shortest Path Roadmap
+        {
+            ROS_INFO("\n--- Test 4: Shortest Path Roadmap ---");
+            
+            std::shared_ptr<Roadmap> SPR_roadmap;
+            SPR_roadmap = generateShortestPathRoadmap(map, 0.2); // Example padding of 0.2 units
+
+            if (!SPR_roadmap) {
+                ROS_WARN("[RoadmapTest] Cannot visualize null roadmap");
+                return 1;
+            }
+
+            ROS_INFO("[RoadmapTest] Visualizing roadmap...");
+
+            // Display or save
+            std::string output_file = "src/robot_planning/src/combinatorial_planning/test/SPR_roadmap_approx.png";
+            SPR_roadmap->plot(false, true, output_file);
+        }
+                
         ROS_INFO("\n=== All Tests Complete ===");
         ROS_INFO("Check generated PNG files for visualization results");
         

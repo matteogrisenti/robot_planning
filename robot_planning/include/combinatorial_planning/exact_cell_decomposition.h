@@ -8,14 +8,19 @@
 #include <map/map_data_structures.h>
 #include <roadmap/roadmap_data_structures.h>
 
-namespace ExactDecomposition {
+
+/**  Main Function: Recursively subdivides space into grid cells
+ * @brief Generates a Roadmap using Exact Cell Decomposition 
+ * @param map: The Map to decompose
+ * @return Shared pointer to the generated Roadmap
+ */
+std::shared_ptr<Roadmap> exactCellDecomposition(const Map& map);
+
+
+namespace HelperExactDecomposition {
     
-
-    // Main API
-    std::shared_ptr<Roadmap> exactCellDecomposition(const Map& map);
-
-    // Helpers exposed for testing or modularity
     std::vector<Trapezoid> computeTrapezoidalDecomposition(const Map& map);
+    
     void connectAdjacentTrapezoids(std::vector<Trapezoid>& trapezoids);
 }
 

@@ -16,6 +16,8 @@ find_package(catkin REQUIRED COMPONENTS
   nav_msgs
 )
 
+
+find_package(Boost REQUIRED)
 find_package(OpenCV REQUIRED)
 
 catkin_package(
@@ -32,6 +34,7 @@ include_directories(
   include
   ${catkin_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
+  ${Boost_INCLUDE_DIRS}
 )
 
 # ==============================================================================
@@ -84,6 +87,7 @@ add_library(planning_utils src/combinatorial_planning/planning_utils.cpp)
 add_library(exact_cell_decomposition src/combinatorial_planning/exact_cell_decomposition.cpp)
 add_library(approximate_cell_decomposition src/combinatorial_planning/approximate_cell_decomposition.cpp)
 add_library(maximum_clearance_roadmap src/combinatorial_planning/maximum_clearance_roadmap.cpp)
+add_library(shortest_path_roadmap src/combinatorial_planning/shortest_path_roadmap.cpp)
 target_link_libraries(exact_cell_decomposition 
   planning_utils
   roadmap_data_structures  # <--- ADD THIS
@@ -95,8 +99,13 @@ target_link_libraries(approximate_cell_decomposition
 )
 
 target_link_libraries(maximum_clearance_roadmap 
-  planning_utils
-  roadmap_data_structures  # <--- ADD THIS
+  map_data_structures
+  roadmap_data_structures
+)
+
+target_link_libraries(shortest_path_roadmap 
+  map_data_structures
+  roadmap_data_structures
 )
 
 # ==============================================================================
@@ -114,84 +123,93 @@ target_link_libraries(dubins_planner_test_node
 add_dependencies(dubins_planner_test_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 # Test node
-add_executable(roadmap_test_node src/combinatorial_planning/roadmap_test_node.cpp )
-target_link_libraries(roadmap_test_node
+add_executable(combinatorial_test_node src/combinatorial_planning/combinatorial_test_node.cpp )
+target_link_libraries(combinatorial_test_node
   map_builder 
   exact_cell_decomposition
   approximate_cell_decomposition
   maximum_clearance_roadmap
+  shortest_path_roadmap
   roadmap_data_structures  # <--- ADD THIS
   ${catkin_LIBRARIES}
 )
-add_dependencies(roadmap_test_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(combinatorial_test_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
+# --- Sampling Planning Test Node ---
+add_executable(sampling_planning_test_node 
+    src/sample_based_planning/sampling_planning_test_node.cpp
+    src/sample_based_planning/prm.cpp
+    src/sample_based_planning/rrt.cpp
+    src/sample_based_planning/rrt_star.cpp
+    src/map/map_builder.cpp
+    src/map/map_data_structures.cpp
+    src/map/map_visualization.cpp
+    src/roadmap/roadmap_data_structures.cpp
+    src/roadmap/roadmap_visualization.cpp
+    src/combinatorial_planning/planning_utils.cpp
+)
 
-## Rename C++ executable without prefix
-## The above recommended prefix causes long target names, the following renames the
-## target back to the shorter version for ease of user use
-## e.g. "rosrun someones_pkg node" instead of "rosrun someones_pkg someones_pkg_node"
-# set_target_properties(${PROJECT_NAME}_node PROPERTIES OUTPUT_NAME node PREFIX "")
+target_link_libraries(sampling_planning_test_node
+    ${catkin_LIBRARIES}
+    ${OpenCV_LIBRARIES}
+)
+add_dependencies(sampling_planning_test_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
-## Add cmake target dependencies of the executable
-## same as for the library above
-# add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+# =========================================================
+# 1. Crea una libreria per gli algoritmi Sample Based
+# (Mancava dai tuoi log, quindi la definiamo qui per pulizia)
+# =========================================================
+add_library(sample_planning_lib
+    src/sample_based_planning/prm.cpp
+    src/sample_based_planning/rrt.cpp
+    src/sample_based_planning/rrt_star.cpp
+    # Se planning_utils non è già una lib a parte, scommenta la riga sotto:
+    # src/combinatorial_planning/planning_utils.cpp 
+)
+# Linka le dipendenze base alla nuova libreria
+target_link_libraries(sample_planning_lib
+    map_data_structures
+    roadmap_data_structures
+    ${catkin_LIBRARIES}
+    ${OpenCV_LIBRARIES}
+)
 
-## Specify libraries to link a library or executable target against
-# target_link_libraries(${PROJECT_NAME}_node
-#   ${catkin_LIBRARIES}
-# )
+# =========================================================
+# 2. Configura l'eseguibile test_roadmap
+# =========================================================
+add_executable(test_roadmap src/test_roadmap.cpp)
 
-#############
-## Install ##
-#############
+target_link_libraries(test_roadmap
+    map_builder
+    map_data_structures
+    roadmap_data_structures
+    exact_cell_decomposition
+    approximate_cell_decomposition
+    maximum_clearance_roadmap
+    sample_planning_lib
+    ${catkin_LIBRARIES}
+    ${OpenCV_LIBRARIES}
+)
+add_dependencies(test_roadmap ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
-# all install targets should use catkin DESTINATION variables
-# See http://ros.org/doc/api/catkin/html/adv_user_guide/variables.html
-
-## Mark executable scripts (Python etc.) for installation
-## in contrast to setup.py, you can choose the destination
-# catkin_install_python(PROGRAMS
-#   scripts/my_python_script
-#   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-# )
-
-## Mark executables for installation
-## See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_executables.html
-# install(TARGETS ${PROJECT_NAME}_node
-#   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-# )
-
-## Mark libraries for installation
-## See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_libraries.html
-# install(TARGETS ${PROJECT_NAME}
-#   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}
-# )
-
-## Mark cpp header files for installation
-# install(DIRECTORY include/${PROJECT_NAME}/
-#   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-#   FILES_MATCHING PATTERN "*.h"
-#   PATTERN ".svn" EXCLUDE
-# )
-
-## Mark other files for installation (e.g. launch and bag files, etc.)
-# install(FILES
-#   # myfile1
-#   # myfile2
-#   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
-# )
-
-#############
-## Testing ##
-#############
-
-## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_robot_planning.cpp)
-# if(TARGET ${PROJECT_NAME}-test)
-#   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
-# endif()
-
-## Add folders to be run by python nosetests
-# catkin_add_nosetests(test)
+# 1. Libreria Graph Search (A* e Task Planner)
+add_library(graph_search_lib src/graph_search/astar.cpp)
+target_link_libraries(graph_search_lib
+    roadmap_data_structures
+    map_data_structures
+    ${catkin_LIBRARIES}
+)
+# 2. Nuovo Nodo di Test
+add_executable(astar_planning_test_node src/graph_search/astar_planning_test_node.cpp)
+target_link_libraries(astar_planning_test_node
+    map_builder
+    graph_search_lib           # <--- La nuova lib
+    sample_planning_lib        # <--- Per PRM/RRT
+    exact_cell_decomposition   #
+    approximate_cell_decomposition
+    maximum_clearance_roadmap
+    roadmap_data_structures
+    ${catkin_LIBRARIES}
+    ${OpenCV_LIBRARIES}
+)
+add_dependencies(astar_planning_test_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
