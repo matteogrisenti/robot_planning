@@ -2,7 +2,7 @@
 #define SHORTEST_PATH_ROADMAP_H
 
 #include <memory>
-#include "map/map_data_structures.h"
+#include "map_library/map_data_structures.h"
 #include "roadmap/roadmap_data_structures.h"
 
 /**

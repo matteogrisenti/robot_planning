@@ -8,7 +8,7 @@
 // Include your custom libraries
 #include "dubins_planner/dubins_trajectory.h"
 #include "dubins_planner/collision_checker.h"
-#include "map/map_builder.h" 
+#include "map_library/map_builder.h" 
 
 class DubinsPlanner {
 public:

@@ -1,0 +1,16 @@
+# GOAL Definition
+float64 goal_x
+float64 goal_y
+float64 goal_theta
+float64 velocity
+float64 turning_radius
+---
+# RESULT Definition
+bool success
+string message
+---
+# FEEDBACK Definition
+float64 distance_to_goal
+float64 current_x
+float64 current_y
+string status

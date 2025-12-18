@@ -5,7 +5,7 @@
 #include <memory>
 #include <cmath>
 #include <utility>
-#include <map/map_data_structures.h>
+#include <map_library/map_data_structures.h>
 #include <roadmap/roadmap_data_structures.h>
 
 

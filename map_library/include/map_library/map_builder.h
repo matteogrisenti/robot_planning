@@ -7,7 +7,7 @@
 #include <geometry_msgs/PoseArray.h>
 #include <nav_msgs/Odometry.h>
 
-#include "map/map_data_structures.h"
+#include "map_library/map_data_structures.h"
 
 
 namespace map_builder {

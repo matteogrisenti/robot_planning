@@ -10,8 +10,8 @@
 #include <algorithm>
 #include <string>
 
-#include "map/map_visualization.h"
-#include "map/map_data_structures.h"
+#include "map_library/map_visualization.h"
+#include "map_library/map_data_structures.h"
 
 
 // ============== Borders ==============

@@ -9,9 +9,6 @@
 #include "roadmap/roadmap_data_structures.h"
 #include "roadmap/roadmap_visualization.h"
 
-// NOTA: I costruttori di Vertex e Edge sono definiti inline nel .h 
-// o non richiedono implementazione separata se usano liste di inizializzazione nel .h.
-// Rimuoviamo le definizioni duplicate dal .cpp per evitare conflitti.
 
 /*================= ROADMAP ===================*/
 Roadmap::Roadmap() : linkedMap(nullptr) {}

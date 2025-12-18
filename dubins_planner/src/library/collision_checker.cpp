@@ -2,7 +2,6 @@
 #include <iostream>
 #include <ros/ros.h>
 
-#include "map/map_data_structures.h"
 
 // --- Costruttore ---
 CollisionChecker::CollisionChecker(double robot_radius, double safety_margin) {

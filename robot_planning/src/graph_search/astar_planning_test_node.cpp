@@ -7,7 +7,7 @@
 #include <iomanip>
 #include <iostream>
 
-#include "map/map_builder.h"
+#include "map_library/map_builder.h"
 #include "roadmap/roadmap_data_structures.h"
 #include "roadmap/roadmap_visualization.h"
 #include "combinatorial_planning/exact_cell_decomposition.h"

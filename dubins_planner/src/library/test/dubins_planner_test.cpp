@@ -4,7 +4,7 @@
 
 // Include the Planner Class we want to test
 #include "dubins_planner/dubins_planner.h"
-#include "map/map_builder.h"
+#include "map_library/map_builder.h"
 
 // --- LEGACY GLOBAL VARIABLES (Required for linking dubins_trajectory library) ---
 bool DEBUG = false;
@@ -50,7 +50,7 @@ public:
 
     void setupEnvironment() {
         ROS_INFO("[Tester] 1. Building Map...");
-        map_builder::MapBuilder builder(nh_, 100.0);
+        map_builder::MapBuilder builder(nh_, 1000.0);
         Map map = builder.buildMap();
         
         // INJECT MAP into the planner

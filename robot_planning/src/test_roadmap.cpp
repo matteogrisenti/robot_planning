@@ -4,8 +4,7 @@
 #include <iostream>
 
 // Infrastruttura Mappa e Roadmap
-#include "map/map_builder.h"
-#include "map/map_data_structures.h"
+#include "map_library.h"
 #include "roadmap/roadmap_data_structures.h"
 
 // Algoritmi Combinatoriali

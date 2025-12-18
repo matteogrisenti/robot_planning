@@ -4,7 +4,7 @@ better organization */
 #include <cmath>
 #include <limits>
 
-#include "map/map_visualization.h"
+#include "map_library/map_visualization.h"
 
 namespace map_viz {
 

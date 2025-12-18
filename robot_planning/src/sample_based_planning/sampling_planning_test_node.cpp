@@ -5,8 +5,7 @@
 #include <iomanip> // Per formattazione output
 
 // Include Map & Roadmap Infrastructure
-#include "map/map_builder.h"
-#include "map/map_data_structures.h"
+#include "map_library.h"
 #include "roadmap/roadmap_data_structures.h"
 
 // Include Sample-Based Algorithms

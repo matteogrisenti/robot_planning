@@ -5,7 +5,7 @@
 #include <cmath>
 
 #include "dubins_planner/dubins_planner.h"
-#include "map/map_builder.h"
+#include "map_library/map_builder.h"
 #include "robot_control/Reference.h"
 
 // --- LEGACY GLOBAL VARIABLES ---

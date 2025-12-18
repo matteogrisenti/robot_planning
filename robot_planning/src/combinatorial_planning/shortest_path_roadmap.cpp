@@ -1,6 +1,5 @@
 #include "combinatorial_planning/shortest_path_roadmap.h"
 #include "combinatorial_planning/planning_utils.h"
-#include "map/map_data_structures.h"
 
 #include <vector>
 #include <cmath>

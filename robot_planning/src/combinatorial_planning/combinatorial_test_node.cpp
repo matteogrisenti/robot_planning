@@ -1,7 +1,7 @@
 #include <ros/ros.h>
 #include <memory>
 
-#include "map/map_builder.h"
+#include "map_library/map_builder.h"
 #include "combinatorial_planning/exact_cell_decomposition.h"
 #include "combinatorial_planning/approximate_cell_decomposition.h"
 #include "combinatorial_planning/maximum_clearance_roadmap.h"
