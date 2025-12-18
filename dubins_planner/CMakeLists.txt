@@ -39,6 +39,7 @@ catkin_package(
   INCLUDE_DIRS include
   LIBRARIES 
     dubins_library
+    dubins_client_library
   CATKIN_DEPENDS 
     roscpp 
     nav_msgs 
@@ -70,6 +71,14 @@ add_library(dubins_library
 target_link_libraries(dubins_library
   ${catkin_LIBRARIES}
   map_library
+)
+
+# --- Dubins Planner Client Library ---
+add_library(dubins_client_library 
+  src/dubins_planner_client.cpp
+)
+target_link_libraries(dubins_client_library
+  ${catkin_LIBRARIES}
 )
 
 

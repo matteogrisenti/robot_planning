@@ -35,7 +35,7 @@ public:
     DubinsActionServer(std::string name) : 
         nh_("~"),
         as_(nh_, name, boost::bind(&DubinsActionServer::executeCB, this, _1), false),
-        action_name_(" DUBINS PLANNER SERVER ")
+        action_name_(" Dubins Action Server")
     {
         // 1. Parametri
         nh_.param<std::string>("robot_name", robot_name_, "limo0");

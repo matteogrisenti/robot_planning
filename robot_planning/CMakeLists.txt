@@ -159,3 +159,17 @@ target_link_libraries(astar_planning_test_node
   ${OpenCV_LIBRARIES}
 )
 add_dependencies(astar_planning_test_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+
+# --- Complete Planning Pipeline Node ---
+add_executable(complete_planning_pipeline_node src/complete_planning_pipeline.cpp)
+target_link_libraries(complete_planning_pipeline_node
+  graph_search_lib
+  sample_planning_lib
+  combinatorial_planning_lib 
+  roadmap_lib
+  roadmap_factory_lib
+  dubins_client_library
+  ${catkin_LIBRARIES}
+  ${OpenCV_LIBRARIES}
+)
+add_dependencies(complete_planning_pipeline_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
