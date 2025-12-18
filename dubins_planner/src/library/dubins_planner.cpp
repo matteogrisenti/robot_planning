@@ -86,20 +86,21 @@ void DubinsPlanner::stop() {
     pub_ref_.publish(ref_msg);
 }
 
-void DubinsPlanner::spin() {
-    if (!is_executing_) return;
+bool DubinsPlanner::spin() {
+    if (!is_executing_) return false;
 
     // 1. Calculate progress
     double time_elapsed = (ros::Time::now() - start_time_).toSec();
     double dist = time_elapsed * target_velocity_;
 
-    // 2. Cast lengths to double for comparison
+    // 2. Cast lengths
     double l1 = (double)current_curve_.a1.l;
     double l2 = (double)current_curve_.a2.l;
     double l3 = (double)current_curve_.a3.l;
     double total_L = (double)current_curve_.L;
 
-    // 3. Select Segment
+    // 3. Select Segment & Publish
+    bool finished = false;
     if (dist < l1) {
         publishReference(current_curve_.a1, dist);
     } else if (dist < (l1 + l2)) {
@@ -107,9 +108,12 @@ void DubinsPlanner::spin() {
     } else if (dist < total_L) {
         publishReference(current_curve_.a3, dist - (l1 + l2));
     } else {
-        ROS_INFO("[DubinsPlanner] Goal Reached.");
-        stop();
+        ROS_INFO("[DubinsPlanner] Trajectory finished (Time-based).");
+        stop(); 
+        finished = true;  // Notify caller that execution is finished
     }
+
+    return finished;
 }
 
 void DubinsPlanner::publishReference(const dubinsarc_out& arc, double s_local) {

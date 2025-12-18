@@ -5,18 +5,13 @@
 
 // Infrastruttura Mappa e Roadmap
 #include "map_library.h"
-#include "roadmap/roadmap_data_structures.h"
+#include "roadmap.h"
 
 // Algoritmi Combinatoriali
-#include "combinatorial_planning/exact_cell_decomposition.h"
-#include "combinatorial_planning/approximate_cell_decomposition.h"
-#include "combinatorial_planning/maximum_clearance_roadmap.h"
-#include "combinatorial_planning/shortest_path_roadmap.h"
+#include "combinatorial_planning.h"
 
 // Algoritmi Sample-Based
-#include "sample_based_planning/prm.h"
-#include "sample_based_planning/rrt.h"
-#include "sample_based_planning/rrt_star.h"
+#include "sample_based_planning.h"
 
 int main(int argc, char **argv)
 {
@@ -35,8 +30,8 @@ int main(int argc, char **argv)
         Map map = builder.buildMap();
 
         // Percorsi di output basati sui file originali (Notare l'incoerenza dei path originali mantenuta)
-        std::string combinatorial_base_path = "src/robot_planning/src/combinatorial_planning/test/";
-        std::string sample_base_path = "src/robot_planning/src/sample_based_planning/test/";
+        std::string combinatorial_base_path = "src/robot_planning/src/libraries/combinatorial_planning/test/";
+        std::string sample_base_path = "src/robot_planning/src/libraries/sample_based_planning/test/";
 
         ROS_INFO("Map built successfully.");
         

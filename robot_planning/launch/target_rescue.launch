@@ -71,6 +71,11 @@
 
     </group>
 
+    <!-- Dubins Planner Server Node -->
+    <node pkg="dubins_planner" type="dubins_planner_server_node" name="dubins_planner_server" output="screen">
+        <param name="robot_name" value="limo$(arg robot_id)"/>
+    </node>
+
     <!-- Controller Node -->
     <node pkg="robot_control" type="main" name="limo0_controller" output="screen">
         <param name="robot_id" value="$(arg robot_id)"/>

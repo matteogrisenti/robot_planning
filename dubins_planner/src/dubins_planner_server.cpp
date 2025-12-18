@@ -30,17 +30,15 @@ protected:
     // State
     double current_x_, current_y_, current_theta_;
     bool has_odom_;
-    double goal_tolerance_;
 
 public:
     DubinsActionServer(std::string name) : 
         nh_("~"),
         as_(nh_, name, boost::bind(&DubinsActionServer::executeCB, this, _1), false),
-        action_name_(name)
+        action_name_(" DUBINS PLANNER SERVER ")
     {
         // 1. Parametri
         nh_.param<std::string>("robot_name", robot_name_, "limo0");
-        nh_.param<double>("goal_tolerance", goal_tolerance_, 0.15);
 
         // 2. Setup Logic
         planner_logic_ = std::make_shared<DubinsPlanner>(nh_, robot_name_, 0.25, 0.05);
@@ -79,11 +77,10 @@ public:
     // --- EXECUTION CALLBACK ---
     void executeCB(const dubins_planner::FollowDubinsGoalConstPtr &goal) {
         ros::Rate r(50);
-        bool success = true;
+        bool success = false; // Default false
 
         ROS_INFO("[%s] New Goal: (%.2f, %.2f)", action_name_.c_str(), goal->goal_x, goal->goal_y);
 
-        // Check Odom
         if (!has_odom_) {
             result_.success = false;
             result_.message = "No Odometry";
@@ -98,6 +95,7 @@ public:
             goal->turning_radius, true
         );
 
+        // Check if planning was successful
         if (!plan_ok) {
             result_.success = false;
             result_.message = "Planning Collision/Failed";
@@ -108,36 +106,36 @@ public:
         // --- PHASE 2: EXECUTION ---
         planner_logic_->startExecution(goal->velocity);
         
-        // Loop di controllo
+        // Main Execution Loop
         while(ros::ok()) {
             // 1. Check Cancellation (Preempt)
             if (as_.isPreemptRequested()) {
-                ROS_WARN("[%s] Preempted (Cancelled by Client).", action_name_.c_str());
-                planner_logic_->stop(); // STOP MOTORI IMMEDIATAMENTE
+                ROS_WARN("[%s] Preempted.", action_name_.c_str());
+                planner_logic_->stop();
                 as_.setPreempted();
                 success = false;
                 break;
             }
 
-            // 2. Controllo Logica Robot
-            planner_logic_->spin();
+            // 2. Step the Planner Logic
+            bool path_completed = planner_logic_->spin();
 
-            // 3. Calcolo Distanza
+            // 3. Feedback: 
+            //      - Distance to Goal
+            //      - Current Position
+            //      - Status (Arrived/Moving)
             double dist_sq = pow(current_x_ - goal->goal_x, 2) + pow(current_y_ - goal->goal_y, 2);
-            double dist = sqrt(dist_sq);
-
-            // 4. Publish Feedback
-            feedback_.distance_to_goal = dist;
+            feedback_.distance_to_goal = sqrt(dist_sq);
             feedback_.current_x = current_x_;
             feedback_.current_y = current_y_;
-            feedback_.status = "Moving";
+            feedback_.status = path_completed ? "Arrived" : "Moving";
             as_.publishFeedback(feedback_);
 
-            // 5. Check Arrival
-            if (dist < goal_tolerance_) {
-                ROS_INFO("[%s] Goal Reached.", action_name_.c_str());
-                planner_logic_->stop();
-                break;
+            // 4. Check Arrival 
+            if (path_completed) {
+                ROS_INFO("[%s] Planner reported completion.", action_name_.c_str());
+                success = true;
+                break; // Usciamo dal while
             }
 
             r.sleep();

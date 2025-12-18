@@ -55,7 +55,7 @@ public:
      * @brief Main loop function. Call this at your control frequency (e.g., 50Hz).
      * Calculates the instantaneous reference point and publishes it.
      */
-    void spin();
+    bool spin();
 
     /**
      * @brief Stops execution and sends a zero-velocity command.

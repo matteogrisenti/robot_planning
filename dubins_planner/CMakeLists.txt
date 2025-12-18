@@ -85,4 +85,13 @@ target_link_libraries(dubins_planner_test_node
   ${catkin_LIBRARIES} 
 )
 add_dependencies(dubins_planner_test_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+
+# --- Dubins Planner Server Node ---
+add_executable(dubins_planner_server_node src/dubins_planner_server.cpp)
+target_link_libraries(dubins_planner_server_node 
+  ${catkin_LIBRARIES} 
+  dubins_library
+)
+add_dependencies(dubins_planner_server_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+
 # ==============================================================================

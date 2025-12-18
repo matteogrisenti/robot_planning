@@ -52,54 +52,64 @@ include_directories(
 
 
 # --- Roadmap Libraries ---
-add_library(roadmap_visualization src/roadmap/roadmap_visualization.cpp)
-target_link_libraries(roadmap_visualization
+add_library(roadmap_lib
+  src/libraries/roadmap/roadmap_visualization.cpp
+  src/libraries/roadmap/roadmap_data_structures.cpp
+)
+target_link_libraries(roadmap_lib
   ${OpenCV_LIBS}         
   ${catkin_LIBRARIES}
 )
 
-add_library(roadmap_data_structures src/roadmap/roadmap_data_structures.cpp)
-target_link_libraries(roadmap_data_structures 
-  roadmap_visualization
-)
 
 # --- Planning Utilities Library ---
-add_library(planning_utils_lib src/combinatorial_planning/planning_utils.cpp)
+add_library(planning_utils_lib src/libraries/planning_utils.cpp)
 target_link_libraries(planning_utils_lib
-  roadmap_data_structures
+  roadmap_lib
   ${catkin_LIBRARIES}
 )
 
 # --- Combinatorial Planning Library ---
 add_library(combinatorial_planning_lib
-  src/combinatorial_planning/exact_cell_decomposition.cpp
-  src/combinatorial_planning/approximate_cell_decomposition.cpp
-  src/combinatorial_planning/maximum_clearance_roadmap.cpp
-  src/combinatorial_planning/shortest_path_roadmap.cpp
+  src/libraries/combinatorial_planning/exact_cell_decomposition.cpp
+  src/libraries/combinatorial_planning/approximate_cell_decomposition.cpp
+  src/libraries/combinatorial_planning/maximum_clearance_roadmap.cpp
+  src/libraries/combinatorial_planning/shortest_path_roadmap.cpp
 )
 target_link_libraries(combinatorial_planning_lib
-  roadmap_data_structures
+  roadmap_lib
   planning_utils_lib
   ${catkin_LIBRARIES}
 )
 
 # --- Sample Based Planning Library ---
 add_library(sample_planning_lib
-  src/sample_based_planning/prm.cpp
-  src/sample_based_planning/rrt.cpp
-  src/sample_based_planning/rrt_star.cpp
+  src/libraries/sample_based_planning/prm.cpp
+  src/libraries/sample_based_planning/rrt.cpp
+  src/libraries/sample_based_planning/rrt_star.cpp
 )
 target_link_libraries(sample_planning_lib
-  roadmap_data_structures
+  roadmap_lib
   planning_utils_lib
   ${catkin_LIBRARIES}
   ${OpenCV_LIBRARIES}
 )
 
+# --- Roadmap Factory Library ---
+add_library(roadmap_factory_lib
+  src/libraries/roadmap_factory.cpp
+)
+target_link_libraries(roadmap_factory_lib
+  roadmap_lib
+  combinatorial_planning_lib
+  sample_planning_lib
+  ${catkin_LIBRARIES}
+)
+
 # --- Graph Search Library (A*) ---
-add_library(graph_search_lib src/graph_search/astar.cpp)
+add_library(graph_search_lib src/libraries/graph_search/astar.cpp)
 target_link_libraries(graph_search_lib
-  roadmap_data_structures
+  roadmap_lib
   ${catkin_LIBRARIES}
 )
 
@@ -108,19 +118,19 @@ target_link_libraries(graph_search_lib
 # ==============================================================================
 
 # --- Combinatorial Test Node ---
-add_executable(combinatorial_test_node src/combinatorial_planning/combinatorial_test_node.cpp)
+add_executable(combinatorial_test_node src/libraries/combinatorial_planning/test/combinatorial_test_node.cpp)
 target_link_libraries(combinatorial_test_node 
   combinatorial_planning_lib
-  roadmap_data_structures
+  roadmap_lib
   ${catkin_LIBRARIES}
 )
 add_dependencies(combinatorial_test_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 # --- Sampling Planning Test Node ---
-add_executable(sampling_planning_test_node src/sample_based_planning/sampling_planning_test_node.cpp)
+add_executable(sampling_planning_test_node src/libraries/sample_based_planning/sampling_planning_test_node.cpp)
 target_link_libraries(sampling_planning_test_node
   sample_planning_lib
-  roadmap_data_structures   
+  roadmap_lib   
   ${catkin_LIBRARIES}
   ${OpenCV_LIBRARIES}
 )
@@ -129,7 +139,7 @@ add_dependencies(sampling_planning_test_node ${${PROJECT_NAME}_EXPORTED_TARGETS}
 # --- Roadmap Test Node ---
 add_executable(test_roadmap src/test_roadmap.cpp)
 target_link_libraries(test_roadmap
-  roadmap_data_structures
+  roadmap_lib
   combinatorial_planning_lib 
   sample_planning_lib
   ${catkin_LIBRARIES}
@@ -138,12 +148,13 @@ target_link_libraries(test_roadmap
 add_dependencies(test_roadmap ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 # --- A* Planning Test Node ---
-add_executable(astar_planning_test_node src/graph_search/astar_planning_test_node.cpp)
+add_executable(astar_planning_test_node src/libraries/graph_search/astar_planning_test_node.cpp)
 target_link_libraries(astar_planning_test_node
   graph_search_lib
   sample_planning_lib
   combinatorial_planning_lib 
-  roadmap_data_structures
+  roadmap_lib
+  roadmap_factory_lib
   ${catkin_LIBRARIES}
   ${OpenCV_LIBRARIES}
 )
