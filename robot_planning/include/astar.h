@@ -57,6 +57,15 @@ namespace GraphSearch {
         static int getNearestNodeIdx(const Roadmap& graph, const Vertex& pos);
     };
 
+    // --- DEBUG VISUALIZATION ---
+    /**
+     * @brief Publishes the A* plan to RVIZ.
+     * @param path The list of node indices returned by computePath.
+     * @param graph The roadmap used (to get coordinates).
+     * @param pub A valid ros::Publisher for visualization_msgs::Marker.
+     */
+    void rviz_plan(const std::vector<int>& path, const Roadmap& graph, const ros::Publisher& pub);
+
 }
 
 #endif // GRAPH_SEARCH_H

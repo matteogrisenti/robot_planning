@@ -30,6 +30,7 @@ catkin_package(
     rospy 
     std_msgs 
     geometry_msgs 
+    visualization_msgs
     obstacles_msgs 
     nav_msgs
     map_library   
@@ -107,7 +108,9 @@ target_link_libraries(roadmap_factory_lib
 )
 
 # --- Graph Search Library (A*) ---
-add_library(graph_search_lib src/libraries/graph_search/astar.cpp)
+add_library(graph_search_lib 
+  src/libraries/graph_search/astar.cpp
+  src/libraries/graph_search/rviz_plot_plan.cpp)
 target_link_libraries(graph_search_lib
   roadmap_lib
   ${catkin_LIBRARIES}

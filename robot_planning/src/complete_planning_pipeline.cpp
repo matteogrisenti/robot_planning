@@ -3,6 +3,7 @@
 #include <string>
 #include <iostream>
 #include <vector>
+#include <visualization_msgs/Marker.h>
 
 #include "map_library.h"
 #include "roadmap.h"
@@ -27,8 +28,13 @@ int main(int argc, char **argv) {
 
     std::string general_output_dir = "src/robot_planning/src/test/";
 
-    double robot_velocity = 0.5;   // m/s
-    double turning_radius = 0.5;   // meters
+    double robot_velocity = 0.3;   // m/s
+    double turning_radius = 0.6;   // meters
+
+    // RVIZ PUBLISHER FOR DEBUGGING
+    ros::Publisher debug_pub = nh.advertise<visualization_msgs::Marker>("/debug_path", 10); 
+    // Wait for RVIZ to subscribe
+    ros::Duration(1.0).sleep();
 
     try {
         // =================
@@ -103,6 +109,8 @@ int main(int argc, char **argv) {
             } else {
                 ROS_ERROR("Failed to save path image to %s", path_image_path.c_str());
             }
+            // RVIZ Visualization
+            GraphSearch::rviz_plan(fullGlobalPath, *roadmap, debug_pub);
         } else {
             ROS_ERROR("Failed to compute full path.");
         }
@@ -167,6 +175,8 @@ int main(int argc, char **argv) {
             }
             
             ROS_INFO("Reached Node %d / %lu", (int)i+1, fullGlobalPath.size()-1);
+            // Pause 5 seconds between goals for
+            ros::Duration(5.0).sleep();
         }
 
         ROS_INFO("Mission Completed.");
