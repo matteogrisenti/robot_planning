@@ -118,7 +118,7 @@ public:
             }
 
             // 2. Step the Planner Logic
-            bool path_completed = planner_logic_->spin();
+           bool path_completed = planner_logic_->spin(current_x_, current_y_, current_theta_);
 
             // 3. Feedback: 
             //      - Distance to Goal

@@ -174,7 +174,7 @@ public:
 
     void update() {
         if (plan_started_) {
-            planner_.spin();
+            planner_.spin(robot_x_, robot_y_, robot_theta_);
         }
     }
 };

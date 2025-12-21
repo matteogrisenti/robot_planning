@@ -1,6 +1,9 @@
 #include <ros/ros.h>
 #include <robot_control/Reference.h> // To verify the output messages
 #include <visualization_msgs/MarkerArray.h>
+#include <tf/tf.h>
+#include <nav_msgs/Odometry.h>
+
 
 // Include the Planner Class we want to test
 #include "dubins_planner/dubins_planner.h"
@@ -26,6 +29,10 @@ private:
     
     // Verification Subscriber (listens to the output of the planner)
     ros::Subscriber ref_verification_sub_;
+
+    // Odometry Subcriber (to simulate robot movement)
+    ros::Subscriber odom_sub_;
+    double current_x_, current_y_, current_theta_;
     
     Point goal_pos;
     double goal_theta = 0.0;
@@ -36,15 +43,19 @@ public:
         : nh_("~"), 
           // Initialize Planner with specific robot namespace
           planner_(nh_, "limo0", 0.25, 0.05) 
-    {
-        // 1. Setup Verification: Subscribe to the topic the planner SHOULD publish to
+    {      
+        // 1. Setup Environment (Map & Goal)
+        setupEnvironment();
+
+        // 2. Setup Verification: Subscribe to the topic the planner SHOULD publish to
         ref_verification_sub_ = nh_.subscribe("/limo0/ref", 1, 
                                               &DubinsPlannerTester::verificationCallback, this);
+    
+        // 3. Setup Odometry Subscriber to simulate robot movement
+        odom_sub_ = nh_.subscribe("/limo0/odom", 1, 
+                                 &DubinsPlannerTester::odomCallback, this);
         
-        // 2. Setup Environment (Map & Goal)
-        setupEnvironment();
-        
-        // 3. Run the Test Sequence
+        // 5. Run the Test Sequence
         runTestSequence();
     }
 
@@ -112,10 +123,26 @@ public:
         }
     }
 
+    // Odometry callback to read robot movement
+    void odomCallback(const nav_msgs::Odometry::ConstPtr& msg) {
+        current_x_ = msg->pose.pose.position.x;
+        current_y_ = msg->pose.pose.position.y;
+        
+        tf::Quaternion q(
+            msg->pose.pose.orientation.x, 
+            msg->pose.pose.orientation.y, 
+            msg->pose.pose.orientation.z, 
+            msg->pose.pose.orientation.w);
+        tf::Matrix3x3 m(q);
+        double r, p, y;
+        m.getRPY(r, p, y);
+        current_theta_ = y;
+    }
+
     void spin() {
         if (test_running_) {
             // Drive the planner execution loop
-            planner_.spin();
+            planner_.spin(current_x_, current_y_, current_theta_);
         }
     }
 };

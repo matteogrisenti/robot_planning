@@ -2,7 +2,7 @@
 #include <ros/ros.h>
 
 DubinsClient::DubinsClient(std::string name) : ac_(name, true), action_name_(name) {
-    ROS_INFO("Waiting for action server [%s] to start...", action_name_.c_str());
+    ROS_INFO("[Dubins Client] Waiting for action server [%s] to start...", action_name_.c_str());
     ac_.waitForServer(); 
     ROS_INFO("Action server [%s] started, sending goals.", action_name_.c_str());
 }
@@ -15,7 +15,7 @@ void DubinsClient::sendGoal(double x, double y, double theta, double v, double r
     goal.velocity = v;
     goal.turning_radius = r;
 
-    ROS_INFO("Sending goal: (%.2f, %.2f) @ %.2f rad", x, y, theta);
+    ROS_INFO("[Dubins Client] Sending goal: (%.2f, %.2f) @ %.2f rad", x, y, theta);
     
     // Register callbacks
     ac_.sendGoal(goal,
@@ -38,7 +38,7 @@ bool DubinsClient::isSuccess() {
 void DubinsClient::doneCb(const actionlib::SimpleClientGoalState& state,
             const dubins_planner::FollowDubinsResultConstPtr& result) {
     if (state == actionlib::SimpleClientGoalState::SUCCEEDED) {
-        ROS_INFO("Goal Reached: %s", result->message.c_str());
+        ROS_INFO("[Dubins Client] Goal Reached: %s", result->message.c_str());
     } else {
         ROS_WARN("Goal Failed/Preempted: %s", result->message.c_str());
     }
@@ -50,5 +50,5 @@ void DubinsClient::activeCb() {
 
 void DubinsClient::feedbackCb(const dubins_planner::FollowDubinsFeedbackConstPtr& feedback) {
     // Verbose feedback log
-    ROS_INFO("Dist to goal: %.2f | Status: %s", feedback->distance_to_goal, feedback->status.c_str());
+    ROS_INFO("[Dubins Client] Dist to goal: %.2f | Status: %s", feedback->distance_to_goal, feedback->status.c_str());
 }

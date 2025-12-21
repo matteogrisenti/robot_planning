@@ -30,7 +30,8 @@ public:
     void setMap(const Map& map);
 
     /**
-     * @brief Plans a collision-free Dubins path from start to goal.
+     * @brief Plans a collision-free Dubins path from start to goal and stores it 
+     * internally in current_curve_.
      * @param start_x Robot start X
      * @param start_y Robot start Y
      * @param start_th Robot start Theta
@@ -46,16 +47,21 @@ public:
                   double rho, bool debug_viz = false);
 
     /**
-     * @brief Starts executing the currently planned path.
+     * @brief Initializes execution state of the currently planned path.
      * @param velocity Desired linear velocity (m/s)
      */
     void startExecution(double velocity);
 
     /**
-     * @brief Main loop function. Call this at your control frequency (e.g., 50Hz).
-     * Calculates the instantaneous reference point and publishes it.
+     * @brief Real executor of the planned path. It interpolate the path based on current robot pose.
+     * to get the reference point to send to the robot. Reference is thne published inside this function
+     * to the topic /robot_name/ref
+     * @param curr_x Current robot X
+     * @param curr_y Current robot Y
+     * @param curr_th Current robot Theta
+     * @return true if the path execution is finished
      */
-    bool spin();
+    bool spin(double curr_x, double curr_y, double curr_th);
 
     /**
      * @brief Stops execution and sends a zero-velocity command.
@@ -70,6 +76,8 @@ private:
     // Logic Objects
     CollisionChecker collision_checker_;
     dubinscurve_out current_curve_;
+    int current_segment_index_;
+    double total_arc_distance_;
     int current_best_idx_; // Needed for collision check verification
 
     // Execution State
