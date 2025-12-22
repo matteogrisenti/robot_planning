@@ -38,7 +38,6 @@ bool isSegmentSafe(const Vertex& p1, const Vertex& p2, const std::vector<Obstacl
     // 2. Check Approfondito ad Alta Risoluzione
     double dist = std::hypot(p2.x - p1.x, p2.y - p1.y);
     
-    // FIX: Passo di campionamento ridotto a 5cm per non mancare spigoli
     double step_size = 0.05; 
     int steps = std::max(2, (int)(dist / step_size)); 
     
@@ -54,8 +53,7 @@ bool isSegmentSafe(const Vertex& p1, const Vertex& p2, const std::vector<Obstacl
     return true;
 }
 
-// --- ROADMAP INTEGRATION (ADAPTIVE) ---
-// Qui dobbiamo essere flessibili: se la vittima è attaccata al muro, dobbiamo accettare un margine basso.
+// --- ROADMAP INTEGRATION (FIXED) ---
 void integratePosition(std::shared_ptr<Roadmap>& roadmap, const Vertex& pos, const std::vector<Obstacle>& obstacles, const std::string& label) {
     for(int i=0; i<roadmap->getNumVertices(); ++i) {
         if(roadmap->getVertex(i).distance(pos) < 0.05) return; 
@@ -73,10 +71,10 @@ void integratePosition(std::shared_ptr<Roadmap>& roadmap, const Vertex& pos, con
     }
     std::sort(neighbors.begin(), neighbors.end());
 
-    // STRATEGIA ADATTIVA:
-    // 1. Proviamo a connetterci con un margine ENORME (0.9m) per garantire curve Dubins facili.
-    // 2. Se fallisce, scendiamo a margini più stretti (0.45m, 0.20m) solo per i punti difficili.
-    std::vector<double> margins = {0.90, 0.60, 0.30, -1.0}; 
+    // STRATEGIA ADATTIVA CORRETTA:
+    // RIMOSSO -1.0. Se non c'è spazio (meno di 30cm), NON connettere. 
+    // Meglio fallire qui che crashare durante Dubins.
+    std::vector<double> margins = {0.90, 0.60, 0.30}; 
     int connected_count = 0;
     int min_connections = 3; 
 
@@ -106,24 +104,18 @@ void integratePosition(std::shared_ptr<Roadmap>& roadmap, const Vertex& pos, con
     if(connected_count > 0) {
         ROS_INFO("Integrated %s at (%.2f, %.2f) -> %d edges.", label.c_str(), pos.x, pos.y, connected_count);
     } else {
-        ROS_ERROR("CRITICAL: FAILED to integrate %s! It is unreachable.", label.c_str());
+        ROS_ERROR("CRITICAL: FAILED to integrate %s! It is unreachable with safety margins.", label.c_str());
     }
 }
 
-// --- OPTIMIZER (STRICT SAFETY) ---
+// --- OPTIMIZER ---
 std::vector<int> optimizePath(const std::vector<int>& rawPath, const Roadmap& roadmap, const std::vector<Obstacle>& obstacles) {
     if (rawPath.size() < 2) return rawPath;
     std::vector<int> optimized;
     optimized.push_back(rawPath[0]);
     int currentIdx = 0;
     
-    // FIX: Margine di sicurezza AUMENTATO a 0.90m.
-    // Questo impedisce all'ottimizzatore di creare scorciatoie che passano 
-    // a meno di 90cm dagli ostacoli. Se il percorso originale (roadmap) è sicuro,
-    // l'ottimizzatore lo manterrà invece di tagliare pericolosamente.
     double safety_margin = 0.90; 
-    
-    // Distanza minima aumentata per evitare micro-segmenti che mandano in crisi Dubins
     double min_node_dist = 1.0; 
 
     while (currentIdx < rawPath.size() - 1) {
@@ -133,24 +125,19 @@ std::vector<int> optimizePath(const std::vector<int>& rawPath, const Roadmap& ro
             const Vertex& vStart = roadmap.getVertex(rawPath[currentIdx]);
             const Vertex& vEnd = roadmap.getVertex(rawPath[i]);
             
-            // Check severo
             if (isSegmentSafe(vStart, vEnd, obstacles, safety_margin)) {
-                // Check lunghezza segmento (evita segmenti troppo lunghi in spazi stretti se necessario, ma qui ok)
                 optimized.push_back(rawPath[i]);
                 currentIdx = i;
                 shortcutFound = true;
                 break;
             }
         }
-        // Se non trovo scorciatoie sicure, avanzo di un solo passo sul percorso originale
-        // (che si presume sicuro grazie alla costruzione della Roadmap/Integrazione)
         if (!shortcutFound) {
             optimized.push_back(rawPath[currentIdx + 1]);
             currentIdx++;
         }
     }
     
-    // Filtro finale per rimuovere nodi troppo vicini
     if (optimized.size() > 2) {
         std::vector<int> filtered;
         filtered.push_back(optimized[0]);
@@ -186,7 +173,7 @@ int main(int argc, char **argv) {
     }
 
     std::string planner_type;
-    nh.param<std::string>("planner_type", planner_type, "rrt"); 
+    nh.param<std::string>("planner_type", planner_type, "acd"); 
     std::string general_output_dir = "src/robot_planning/robot_planning/src/test/";
     double robot_velocity = 0.5;   
     double turning_radius = 0.4;   
@@ -236,6 +223,7 @@ int main(int argc, char **argv) {
         std::set<int> criticalNodes(missionSequence.begin(), missionSequence.end());
 
         std::vector<int> fullGlobalPath;
+        // Costruzione del percorso globale con logica anti-crash per il Gate
         for (size_t i = 0; i < missionSequence.size() - 1; ++i) {
             std::vector<int> rawSegment = GraphSearch::AStarPlanner::computePath(*roadmap, missionSequence[i], missionSequence[i+1]);
             
@@ -244,10 +232,23 @@ int main(int argc, char **argv) {
                 continue; 
             }
 
-            // Ottimizzazione con margini SEVERI
-            std::vector<int> optimizedSegment = optimizePath(rawSegment, *roadmap, map.obstacles.get_obstacles());
-            if (fullGlobalPath.empty()) fullGlobalPath = optimizedSegment;
-            else fullGlobalPath.insert(fullGlobalPath.end(), optimizedSegment.begin() + 1, optimizedSegment.end());
+            // FIX: Identifica se stiamo approcciando il Gate (ultimo segmento della missione)
+            bool isCriticalApproach = (i == missionSequence.size() - 2);
+
+            std::vector<int> segmentToAdd;
+            if (isCriticalApproach) {
+                // Strategia "Safe Approach": Disabilita l'ottimizzazione per l'ultimo tratto.
+                // Manteniamo i nodi fitti della roadmap per dare al Dubins planner più punti di manovra
+                // invece di una linea retta rigida che potrebbe passare troppo vicina agli ostacoli.
+                ROS_INFO("[Planner] Critical Approach to GATE: Skipping optimization to ensure Dubins feasibility.");
+                segmentToAdd = rawSegment;
+            } else {
+                // Ottimizzazione standard per i tratti intermedi
+                segmentToAdd = optimizePath(rawSegment, *roadmap, map.obstacles.get_obstacles());
+            }
+
+            if (fullGlobalPath.empty()) fullGlobalPath = segmentToAdd;
+            else fullGlobalPath.insert(fullGlobalPath.end(), segmentToAdd.begin() + 1, segmentToAdd.end());
         }
 
         if (fullGlobalPath.empty()) throw std::runtime_error("Failed to compute path.");
@@ -286,7 +287,7 @@ int main(int argc, char **argv) {
             }
 
             int retry_count = 0;
-            const int MAX_RETRIES = isCritical ? 5 : 0; 
+            const int MAX_RETRIES = isCritical ? 5 : 1; 
             bool success = false;
 
             while (!success && retry_count <= MAX_RETRIES) {
@@ -300,7 +301,7 @@ int main(int argc, char **argv) {
                 while(ros::ok()) {
                     if (dubins_client.waitForResult(0.01)) { 
                         if (dubins_client.isSuccess()) success = true;
-                        else ROS_WARN("Node %d aborted by server.", nextIdx);
+                        else ROS_WARN("Node %d aborted by server (Collision detected?).", nextIdx);
                         break;
                     }
 
@@ -321,6 +322,13 @@ int main(int argc, char **argv) {
 
                 if (success) break;
                 
+                // FIX: Gestione fallimento intelligente
+                if (!success && retry_count == MAX_RETRIES) {
+                    ROS_ERROR("CRITICAL FAILURE: Cannot reach Node %d after %d attempts. Geometry likely impossible.", nextIdx, retry_count);
+                    // Interrompiamo per evitare crash o comportamenti indefiniti
+                    break;
+                }
+
                 retry_count++;
                 if (retry_count <= MAX_RETRIES) {
                     ROS_WARN("Retrying Critical Node %d (Attempt %d)...", nextIdx, retry_count);
@@ -330,9 +338,10 @@ int main(int argc, char **argv) {
 
             if (!success) {
                 if (isCritical) {
-                    ROS_ERROR("CRITICAL FAILURE: Could not reach VICTIM/GATE (Node %d).", nextIdx);
+                    ROS_ERROR("CRITICAL MISSION FAILURE: Could not reach VICTIM/GATE (Node %d). Stopping mission.", nextIdx);
+                    break; // Interrompi l'intera missione
                 } else {
-                    ROS_WARN("Skipping intermediate waypoint %d.", nextIdx);
+                    ROS_WARN("Skipping intermediate waypoint %d. Hope next one is reachable.", nextIdx);
                 }
             } 
             else if (isCritical) {
@@ -341,7 +350,7 @@ int main(int argc, char **argv) {
                 ros::Duration(1.0).sleep();
             }
         }
-        ROS_INFO("Mission Completed.");
+        ROS_INFO("Mission Loop Finished.");
     } catch (const std::exception& e) {
         ROS_ERROR("CRITICAL ERROR: %s", e.what());
         return 1;
