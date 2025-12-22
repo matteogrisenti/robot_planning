@@ -1,6 +1,7 @@
 #include "robot_control/lyapunov_controller.h"
 #include <cmath>
 #include <iostream>
+#include <algorithm> // Per std::max
 
 LyapunovController::LyapunovController(const LyapunovParams& params) 
     : params_(params) {}
@@ -31,37 +32,33 @@ std::pair<double, double> LyapunovController::controlUnicycle(
     e_theta = atan2(sin(e_theta), cos(e_theta)); 
 
     // 2. Proiezione Errori nel Body Frame del Robot
-    // Questo è il passaggio mancante fondamentale per correggere lo "slittamento"
     double c = cos(robot_state.theta);
     double s = sin(robot_state.theta);
 
-    // e_x_body: errore longitudinale (lungo la direzione di marcia)
+    // e_x_body: errore longitudinale
     double e_x_body = c * ex_w + s * ey_w;
     
-    // e_y_body: errore laterale (cross-track error)
+    // e_y_body: errore laterale
     double e_y_body = -s * ex_w + c * ey_w;
 
-    // 3. Legge di Controllo (Trajectory Tracking)
-    // Usa Feedforward (v_d, omega_d) + Feedback sugli errori Body Frame
+    // 3. Legge di Controllo
     
-    // Controllo Velocità Lineare:
-    // v_d * cos(e_theta) riduce la velocità se siamo storti
-    // K_P * e_x_body corregge la posizione longitudinale
-    double ctrl_v = v_d * cos(e_theta) + params_.K_P * e_x_body;
+    // CORREZIONE RETROMARCIA:
+    // Il termine feedforward (v_d * cos) spinge avanti.
+    // Il termine feedback (K_P * e_x_body) corregge la posizione.
+    double raw_v = v_d * cos(e_theta) + params_.K_P * e_x_body;
 
-    // Controllo Velocità Angolare:
-    // omega_d: feedforward dalla pianificazione (curva prevista)
-    // K_THETA * sin(e_theta): corregge l'orientamento
-    // K_LAT * e_y_body: corregge l'errore laterale (la "deriva")
-    // Usiamo params_.K_THETA come base per il guadagno laterale per semplicità
-    // Un guadagno extra per e_y aiuta a rientrare in traiettoria velocemente.
-    double ky = params_.K_THETA; // O un valore più alto se serve, es. 3.0
-    
+    // FIX: Impediamo velocità negative. 
+    // Se il robot è davanti al target (raw_v < 0), si ferma (0.0) e aspetta, non torna indietro.
+    // Questo è cruciale per i veicoli Dubins che non dovrebbero fare manovre in reverse durante il path following.
+    double ctrl_v = std::max(0.0, raw_v);
+
+    // Controllo Velocità Angolare (rimane invariato con correzione laterale)
+    double ky = params_.K_THETA; 
     double ctrl_omega = omega_d + params_.K_THETA * sin(e_theta) + ky * e_y_body;
 
     if (verbose) {
-        std::cout << "e_x_b: " << e_x_body << ", e_y_b: " << e_y_body << ", e_theta: " << e_theta << std::endl;
-        std::cout << "ctrl_v: " << ctrl_v << ", ctrl_omega: " << ctrl_omega << std::endl;
+        std::cout << "e_x: " << e_x_body << " e_y: " << e_y_body << " v_raw: " << raw_v << " v_out: " << ctrl_v << std::endl;
     }
 
     return {ctrl_v, ctrl_omega};

@@ -5,7 +5,7 @@
 #include <vector>
 #include <visualization_msgs/Marker.h>
 #include <cmath>
-#include <nav_msgs/Odometry.h> // Per monitorare lo stallo reale
+#include <nav_msgs/Odometry.h> 
 
 #include "map_library.h"
 #include "roadmap.h"
@@ -14,26 +14,17 @@
 #include "dubins_planner_client.h"
 #include "planning_utils.h" 
 
-/** Complete Planning Pipeline
- * 1. Map Building
- * 2. Roadmap Generation
- * 3. Task Planning + A* + PATH SMOOTHING
- * 4. Execution with STALL ABORT
- */
-
-// --- ODOMETRY MONITORING ---
 std::mutex odom_mutex;
 double current_speed = 0.0;
 bool odom_active = false;
 
 void odomCallback(const nav_msgs::Odometry::ConstPtr& msg) {
     std::lock_guard<std::mutex> lock(odom_mutex);
-    // Calcola velocità scalare
     current_speed = std::hypot(msg->twist.twist.linear.x, msg->twist.twist.linear.y);
     odom_active = true;
 }
 
-// --- SAFETY CHECK ---
+// --- SAFETY CHECK (Margine aumentato) ---
 bool isSegmentSafe(const Vertex& p1, const Vertex& p2, const std::vector<Obstacle>& obstacles, double min_clearance) {
     if (PlanningUtils::lineSegmentIntersectsObstacle(p1, p2, obstacles)) return false;
     double dist = std::hypot(p2.x - p1.x, p2.y - p1.y);
@@ -46,13 +37,15 @@ bool isSegmentSafe(const Vertex& p1, const Vertex& p2, const std::vector<Obstacl
     return true;
 }
 
-// --- OPTIMIZER ---
+// --- OPTIMIZER (Margine aumentato) ---
 std::vector<int> optimizePath(const std::vector<int>& rawPath, const Roadmap& roadmap, const std::vector<Obstacle>& obstacles) {
     if (rawPath.size() < 2) return rawPath;
     std::vector<int> optimized;
     optimized.push_back(rawPath[0]);
     int currentIdx = 0;
-    double safety_margin = 0.35; 
+    
+    // INCREASED MARGIN: Account for Dubins curve bulge
+    double safety_margin = 0.65;  // Aumentato da 0.35 a 0.65
     double min_node_dist = 0.8; 
 
     while (currentIdx < rawPath.size() - 1) {
@@ -72,7 +65,7 @@ std::vector<int> optimizePath(const std::vector<int>& rawPath, const Roadmap& ro
             currentIdx++;
         }
     }
-    // Filter short nodes
+    
     if (optimized.size() > 2) {
         std::vector<int> filtered;
         filtered.push_back(optimized[0]);
@@ -98,19 +91,16 @@ double normalizeAngle(double angle) {
 int main(int argc, char **argv) {
     ros::init(argc, argv, "complete_planning_pipeline_node");
     ros::NodeHandle nh("~");
-    ros::AsyncSpinner spinner(2); // 2 Threads for Odom Callback
+    ros::AsyncSpinner spinner(2); 
     spinner.start();
 
-    // 1. Odom Subscriber (Vital for Stall Detection)
-    // Cerchiamo il topic odom globale o specifico
     ros::Subscriber odom_sub = nh.subscribe("/odom", 1, odomCallback);
-    // Fallback se il namespace è diverso (es. /limo0/odom)
     if (odom_sub.getNumPublishers() == 0) {
         odom_sub = nh.subscribe("/limo0/odom", 1, odomCallback);
     }
 
     std::string planner_type;
-    nh.param<std::string>("planner_type", planner_type, "prm"); 
+    nh.param<std::string>("planner_type", planner_type, "rrt"); 
     std::string general_output_dir = "src/robot_planning/robot_planning/src/test/";
     double robot_velocity = 0.5;   
     double turning_radius = 0.4;   
@@ -125,6 +115,8 @@ int main(int argc, char **argv) {
         ROS_INFO("Generating Roadmap: %s", planner_type.c_str());
         std::shared_ptr<Roadmap> roadmap = generateRoadmap(planner_type, map);
         if (!roadmap) throw std::runtime_error("Failed to generate roadmap.");
+        
+        // Save Roadmap
         roadmap->plot(false, true, general_output_dir + planner_type + "_roadmap.png");
 
         ROS_INFO("Planning Mission Sequence...");
@@ -153,7 +145,6 @@ int main(int argc, char **argv) {
         viz.saveToFile(general_output_dir + planner_type + "_path.png");
         GraphSearch::rviz_plan(fullGlobalPath, *roadmap, debug_pub);
 
-        // Execution
         ROS_INFO("Initializing Dubins Action Client...");
         DubinsClient dubins_client("/dubins_planner_server/follow_dubins_path");
 
@@ -167,6 +158,7 @@ int main(int argc, char **argv) {
             double goal_theta = 0.0;
             double approach_angle = std::atan2(targetV.y - currentV.y, targetV.x - currentV.x);
 
+            // Predict orientation
             if (i + 2 < fullGlobalPath.size()) {
                 const Vertex& futureV = roadmap->getVertex(fullGlobalPath[i+2]);
                 double exit_angle = std::atan2(futureV.y - targetV.y, futureV.x - targetV.x);
@@ -177,37 +169,46 @@ int main(int argc, char **argv) {
                 goal_theta = approach_angle;
             }
 
+            // --- TRY 1: PREDICTIVE TURN ---
             dubins_client.sendGoal(targetV.x, targetV.y, goal_theta, robot_velocity, turning_radius);
-
-            // --- STALL DETECTION WATCHDOG ---
-            // Se la velocità è < 0.02 m/s per più di 3 secondi, il robot è inchiodato. Abortiamo.
+            
+            bool segment_success = false;
             ros::Rate loop_rate(5); 
             ros::Time stall_start_time = ros::Time::now();
             
             while(ros::ok()) {
                 if (dubins_client.waitForResult(0.01)) { 
-                    if (!dubins_client.isSuccess()) ROS_WARN("Dubins Node %d aborted.", nextIdx);
+                    if (dubins_client.isSuccess()) {
+                        segment_success = true;
+                    } else {
+                        ROS_WARN("Node %d: Collision detected or planning failed.", nextIdx);
+                        // Fallback logic handled outside loop
+                    }
                     break;
                 }
 
                 double v_now = 0.0;
-                {
-                    std::lock_guard<std::mutex> lock(odom_mutex);
-                    v_now = current_speed;
-                }
+                { std::lock_guard<std::mutex> lock(odom_mutex); v_now = current_speed; }
 
-                // Se ci muoviamo, resettiamo il timer di stallo
-                if (v_now > 0.02) {
-                    stall_start_time = ros::Time::now();
-                } else {
-                    // Se siamo fermi da troppo tempo...
-                    if (ros::Time::now() - stall_start_time > ros::Duration(3.0)) {
-                        ROS_ERROR("STALL DETECTED (Speed=0 for 3s). Aborting segment to unblock.");
-                        // Inviare il prossimo goal sovrascriverà questo. Usciamo dal loop.
-                        break;
-                    }
+                if (v_now > 0.02) stall_start_time = ros::Time::now();
+                else if (ros::Time::now() - stall_start_time > ros::Duration(3.0)) {
+                    ROS_ERROR("STALL DETECTED. Aborting segment.");
+                    break;
                 }
                 loop_rate.sleep();
+            }
+
+            // --- TRY 2: FALLBACK (Direct Orientation) ---
+            if (!segment_success) {
+                ROS_WARN("Retrying Node %d with direct orientation...", nextIdx);
+                // Retry aiming straight at the target (easier Dubins curve usually)
+                dubins_client.sendGoal(targetV.x, targetV.y, approach_angle, robot_velocity, turning_radius);
+                
+                // Simple wait for fallback
+                dubins_client.waitForResult(15.0); 
+                if(!dubins_client.isSuccess()) {
+                     ROS_ERROR("Fallback failed too. Skipping node.");
+                }
             }
         }
         ROS_INFO("Mission Completed.");
