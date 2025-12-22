@@ -91,10 +91,22 @@ std::shared_ptr<Roadmap> shortestPathRoadmap(const Map& map, const double paddin
         }
     }
 
+        // 2. Aggiungi esplicitamente Vittime e Gate come nodi
+    for (const auto& v : map.victims.get_victims()) {
+        roadmap->addVertex(Vertex(v.get_center().x, v.get_center().y));
+    }
+    if (!map.gates.get_gates().empty()) {
+        auto g = map.gates.get_gates()[0].get_position();
+        roadmap->addVertex(Vertex(g.x, g.y));
+    }
+
+    // 3. Loop di Visibilità (modificato per includere tutti i nodi appena aggiunti)
+    int total_nodes = roadmap->getNumVertices();
+
     // 3. Connect Visible Vertices (Bitangents)
     // Iterate through all unique pairs of vertices to form the Visibility Graph.
     // This connects any two vertices (u, v) if the line segment uv lies entirely in Free Space.
-    int num_vertices = roadmap->getNumVertices();
+
 
     // Prepare map border vertices once for efficiency in the loop
     std::vector<Vertex> map_border_vertices;
@@ -102,8 +114,8 @@ std::shared_ptr<Roadmap> shortestPathRoadmap(const Map& map, const double paddin
         map_border_vertices.push_back(PlanningUtils::toVertex(p));
     }
 
-    for (int i = 0; i < num_vertices; ++i) {
-        for (int j = i + 1; j < num_vertices; ++j) {
+    for (int i = 0; i < total_nodes; ++i) {
+        for (int j = i + 1; j < total_nodes; ++j) {
 
             Vertex v1 = roadmap->getVertex(i);
             Vertex v2 = roadmap->getVertex(j);
