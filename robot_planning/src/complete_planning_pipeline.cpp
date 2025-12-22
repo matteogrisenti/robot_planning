@@ -3,9 +3,11 @@
 #include <string>
 #include <iostream>
 #include <vector>
+#include <set> 
 #include <visualization_msgs/Marker.h>
 #include <cmath>
 #include <nav_msgs/Odometry.h> 
+#include <algorithm> // Sort
 
 #include "map_library.h"
 #include "roadmap.h"
@@ -14,17 +16,23 @@
 #include "dubins_planner_client.h"
 #include "planning_utils.h" 
 
+// Globals per Odometria
 std::mutex odom_mutex;
 double current_speed = 0.0;
-bool odom_active = false;
+Vertex current_pose_odom(0,0); // Posizione reale robot
+bool odom_active = true;
 
 void odomCallback(const nav_msgs::Odometry::ConstPtr& msg) {
     std::lock_guard<std::mutex> lock(odom_mutex);
+    // Calcola velocità scalare
     current_speed = std::hypot(msg->twist.twist.linear.x, msg->twist.twist.linear.y);
+    // Salva posizione reale
+    current_pose_odom.x = msg->pose.pose.position.x;
+    current_pose_odom.y = msg->pose.pose.position.y;
     odom_active = true;
 }
 
-// --- SAFETY CHECK (Margine aumentato) ---
+// --- SAFETY CHECK ---
 bool isSegmentSafe(const Vertex& p1, const Vertex& p2, const std::vector<Obstacle>& obstacles, double min_clearance) {
     if (PlanningUtils::lineSegmentIntersectsObstacle(p1, p2, obstacles)) return false;
     double dist = std::hypot(p2.x - p1.x, p2.y - p1.y);
@@ -37,16 +45,50 @@ bool isSegmentSafe(const Vertex& p1, const Vertex& p2, const std::vector<Obstacl
     return true;
 }
 
-// --- OPTIMIZER (Margine aumentato) ---
+// --- ROADMAP INTEGRATION ---
+void integratePosition(std::shared_ptr<Roadmap>& roadmap, const Vertex& pos, const std::vector<Obstacle>& obstacles, const std::string& label) {
+    // Evita duplicati
+    for(int i=0; i<roadmap->getNumVertices(); ++i) {
+        if(roadmap->getVertex(i).distance(pos) < 0.05) return; 
+    }
+
+    int newIdx = roadmap->addVertex(pos);
+    
+    // Collega ai vicini
+    double search_radius = 5.0; 
+    std::vector<std::pair<double, int>> neighbors;
+    for(int i=0; i<roadmap->getNumVertices(); ++i) {
+        if(i == newIdx) continue;
+        double d = roadmap->getVertex(i).distance(pos);
+        if(d < search_radius) neighbors.push_back({d, i});
+    }
+    std::sort(neighbors.begin(), neighbors.end());
+
+    int k_conn = 10; 
+    int connected_count = 0;
+    double connection_margin = 0.45; 
+
+    for(const auto& pair : neighbors) {
+        if(connected_count >= k_conn) break;
+        int targetIdx = pair.second;
+        if(isSegmentSafe(pos, roadmap->getVertex(targetIdx), obstacles, connection_margin)) {
+            roadmap->addEdge(newIdx, targetIdx, pair.first);
+            roadmap->addEdge(targetIdx, newIdx, pair.first); 
+            connected_count++;
+        }
+    }
+    if(connected_count > 0) ROS_INFO("Integrated %s at (%.2f, %.2f) -> %d edges.", label.c_str(), pos.x, pos.y, connected_count);
+    else ROS_WARN("FAILED to integrate %s. Might be isolated.", label.c_str());
+}
+
+// --- OPTIMIZER ---
 std::vector<int> optimizePath(const std::vector<int>& rawPath, const Roadmap& roadmap, const std::vector<Obstacle>& obstacles) {
     if (rawPath.size() < 2) return rawPath;
     std::vector<int> optimized;
     optimized.push_back(rawPath[0]);
     int currentIdx = 0;
-    
-    // INCREASED MARGIN: Account for Dubins curve bulge
-    double safety_margin = 0.65;  // Aumentato da 0.35 a 0.65
-    double min_node_dist = 1.5; 
+    double safety_margin = 0.65; 
+    double min_node_dist = 0.8; 
 
     while (currentIdx < rawPath.size() - 1) {
         bool shortcutFound = false;
@@ -65,7 +107,7 @@ std::vector<int> optimizePath(const std::vector<int>& rawPath, const Roadmap& ro
             currentIdx++;
         }
     }
-    
+    // Filter
     if (optimized.size() > 2) {
         std::vector<int> filtered;
         filtered.push_back(optimized[0]);
@@ -94,6 +136,7 @@ int main(int argc, char **argv) {
     ros::AsyncSpinner spinner(2); 
     spinner.start();
 
+    // Sottoscrizione Odometria
     ros::Subscriber odom_sub = nh.subscribe("/odom", 1, odomCallback);
     if (odom_sub.getNumPublishers() == 0) {
         odom_sub = nh.subscribe("/limo0/odom", 1, odomCallback);
@@ -105,7 +148,18 @@ int main(int argc, char **argv) {
     double robot_velocity = 0.5;   
     double turning_radius = 0.4;   
     ros::Publisher debug_pub = nh.advertise<visualization_msgs::Marker>("/debug_path", 10); 
-    ros::Duration(1.0).sleep(); 
+    
+    // --- FIX 1: Attesa Posizione Reale ---
+    ROS_INFO("Waiting for initial robot pose from Odom...");
+    while(ros::ok() && !odom_active) {
+        ros::Duration(0.1).sleep();
+    }
+    Vertex startPose;
+    {
+        std::lock_guard<std::mutex> lock(odom_mutex);
+        startPose = current_pose_odom;
+    }
+    ROS_INFO("Planning will start from Real Pose: (%.2f, %.2f)", startPose.x, startPose.y);
 
     try {
         map_builder::MapBuilder builder(nh, 1000.0);
@@ -116,18 +170,29 @@ int main(int argc, char **argv) {
         std::shared_ptr<Roadmap> roadmap = generateRoadmap(planner_type, map);
         if (!roadmap) throw std::runtime_error("Failed to generate roadmap.");
         
-        // Save Roadmap
+        // Integrazione Start (Reale) e Gate
+        integratePosition(roadmap, startPose, map.obstacles.get_obstacles(), "RealStart");
+
+        Vertex gatePose(0,0);
+        if (!map.gates.get_gates().empty()) {
+            Point g = map.gates.get_gates()[0].get_position();
+            gatePose = Vertex(g.x, g.y);
+            integratePosition(roadmap, gatePose, map.obstacles.get_obstacles(), "Gate");
+        }
+
+        std::vector<Victim> victims = map.victims.get_victims();
+        for(size_t i=0; i<victims.size(); ++i) {
+            Point v = victims[i].get_center();
+            integratePosition(roadmap, Vertex(v.x, v.y), map.obstacles.get_obstacles(), "Victim " + std::to_string(i));
+        }
+
         roadmap->plot(false, true, general_output_dir + planner_type + "_roadmap.png");
 
         ROS_INFO("Planning Mission Sequence...");
-        Point s = map.start.get_position();
-        Vertex startPose(s.x, s.y);
-        Vertex gatePose(0,0);
-        if (!map.gates.get_gates().empty()) 
-            gatePose = Vertex(map.gates.get_gates()[0].get_position().x, map.gates.get_gates()[0].get_position().y);
-
-        std::vector<int> missionSequence = GraphSearch::TaskPlanner::planMissionSequence(*roadmap, startPose, map.victims.get_victims(), gatePose);
+        std::vector<int> missionSequence = GraphSearch::TaskPlanner::planMissionSequence(*roadmap, startPose, victims, gatePose);
         if (missionSequence.empty()) throw std::runtime_error("Task Planning failed.");
+
+        std::set<int> criticalNodes(missionSequence.begin(), missionSequence.end());
 
         std::vector<int> fullGlobalPath;
         for (size_t i = 0; i < missionSequence.size() - 1; ++i) {
@@ -155,11 +220,15 @@ int main(int argc, char **argv) {
             const Vertex& currentV = roadmap->getVertex(currentIdx);
             const Vertex& targetV = roadmap->getVertex(nextIdx);
 
+            bool isCritical = (criticalNodes.find(nextIdx) != criticalNodes.end());
+            
             double goal_theta = 0.0;
             double approach_angle = std::atan2(targetV.y - currentV.y, targetV.x - currentV.x);
 
-            // Predict orientation
-            if (i + 2 < fullGlobalPath.size()) {
+            if (isCritical) {
+                goal_theta = approach_angle;
+            } 
+            else if (i + 2 < fullGlobalPath.size()) {
                 const Vertex& futureV = roadmap->getVertex(fullGlobalPath[i+2]);
                 double exit_angle = std::atan2(futureV.y - targetV.y, futureV.x - targetV.x);
                 double turn_angle = std::abs(normalizeAngle(exit_angle - approach_angle));
@@ -169,46 +238,51 @@ int main(int argc, char **argv) {
                 goal_theta = approach_angle;
             }
 
-            // --- TRY 1: PREDICTIVE TURN ---
-            dubins_client.sendGoal(targetV.x, targetV.y, goal_theta, robot_velocity, turning_radius);
-            
-            bool segment_success = false;
-            ros::Rate loop_rate(5); 
-            ros::Time stall_start_time = ros::Time::now();
-            
-            while(ros::ok()) {
-                if (dubins_client.waitForResult(0.01)) { 
-                    if (dubins_client.isSuccess()) {
-                        segment_success = true;
-                    } else {
-                        ROS_WARN("Node %d: Collision detected or planning failed.", nextIdx);
-                        // Fallback logic handled outside loop
-                    }
-                    break;
-                }
+            int retry_count = 0;
+            const int MAX_RETRIES = isCritical ? 3 : 0; 
+            bool success = false;
 
-                double v_now = 0.0;
-                { std::lock_guard<std::mutex> lock(odom_mutex); v_now = current_speed; }
-
-                if (v_now > 0.02) stall_start_time = ros::Time::now();
-                else if (ros::Time::now() - stall_start_time > ros::Duration(3.0)) {
-                    ROS_ERROR("STALL DETECTED. Aborting segment.");
-                    break;
-                }
-                loop_rate.sleep();
-            }
-
-            // --- TRY 2: FALLBACK (Direct Orientation) ---
-            if (!segment_success) {
-                ROS_WARN("Retrying Node %d with direct orientation...", nextIdx);
-                // Retry aiming straight at the target (easier Dubins curve usually)
-                dubins_client.sendGoal(targetV.x, targetV.y, approach_angle, robot_velocity, turning_radius);
+            while (!success && retry_count <= MAX_RETRIES) {
+                double v_cmd = (retry_count == 0) ? robot_velocity : (robot_velocity * 0.7);
+                dubins_client.sendGoal(targetV.x, targetV.y, goal_theta, v_cmd, turning_radius);
                 
-                // Simple wait for fallback
-                dubins_client.waitForResult(15.0); 
-                if(!dubins_client.isSuccess()) {
-                     ROS_ERROR("Fallback failed too. Skipping node.");
+                ros::Rate loop_rate(5); 
+                ros::Time stall_start_time = ros::Time::now();
+                // --- FIX 2: Grace Period Timer ---
+                ros::Time segment_start_time = ros::Time::now(); 
+
+                while(ros::ok()) {
+                    if (dubins_client.waitForResult(0.01)) { 
+                        if (dubins_client.isSuccess()) success = true;
+                        else ROS_WARN("Dubins Node %d aborted.", nextIdx);
+                        break;
+                    }
+
+                    double v_now = 0.0;
+                    { std::lock_guard<std::mutex> lock(odom_mutex); v_now = current_speed; }
+
+                    // Se siamo nel periodo di grazia (primi 2.0s), ignoriamo lo stallo
+                    if (ros::Time::now() - segment_start_time < ros::Duration(2.0)) {
+                        stall_start_time = ros::Time::now(); // Reset continuo del timer stallo
+                    } else {
+                        // Controllo Stallo Normale
+                        if (v_now > 0.02) stall_start_time = ros::Time::now();
+                        else if (ros::Time::now() - stall_start_time > ros::Duration(3.0)) {
+                            ROS_ERROR("STALL DETECTED (Speed=0 for 3s). Aborting.");
+                            break;
+                        }
+                    }
+                    loop_rate.sleep();
                 }
+                if (success) break;
+                retry_count++;
+                if (retry_count <= MAX_RETRIES) {
+                    ROS_WARN("Retrying Critical Node %d...", nextIdx);
+                    ros::Duration(0.5).sleep();
+                }
+            }
+            if (!success && isCritical) {
+                ROS_ERROR("FAILED TO REACH CRITICAL NODE %d.", nextIdx);
             }
         }
         ROS_INFO("Mission Completed.");
