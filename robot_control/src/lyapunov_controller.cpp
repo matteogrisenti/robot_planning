@@ -1,4 +1,6 @@
 #include "robot_control/lyapunov_controller.h"
+#include <cmath>
+#include <iostream>
 
 LyapunovController::LyapunovController(const LyapunovParams& params) 
     : params_(params) {}
@@ -20,24 +22,45 @@ std::pair<double, double> LyapunovController::controlUnicycle(
     double v_d, double omega_d,
     bool verbose)
 {
-    // Position error
-    double e_x = des_x - robot_state.x;
-    double e_y = des_y - robot_state.y;
-
-    // Heading error
+    // 1. Calcolo Errori nel World Frame
+    double ex_w = des_x - robot_state.x;
+    double ey_w = des_y - robot_state.y;
+    
+    // Normalizza errore angolare
     double e_theta = des_theta - robot_state.theta;
-    e_theta = atan2(sin(e_theta), cos(e_theta)); // Normalize to [-pi, pi]
+    e_theta = atan2(sin(e_theta), cos(e_theta)); 
 
-    // Control law
-    double rho = sqrt(e_x * e_x + e_y * e_y);
-    double alpha = atan2(e_y, e_x) - robot_state.theta;
-    alpha = atan2(sin(alpha), cos(alpha));
+    // 2. Proiezione Errori nel Body Frame del Robot
+    // Questo è il passaggio mancante fondamentale per correggere lo "slittamento"
+    double c = cos(robot_state.theta);
+    double s = sin(robot_state.theta);
 
-    double ctrl_v = v_d + params_.K_P * rho * cos(alpha);
-    double ctrl_omega = omega_d + params_.K_THETA * e_theta;
+    // e_x_body: errore longitudinale (lungo la direzione di marcia)
+    double e_x_body = c * ex_w + s * ey_w;
+    
+    // e_y_body: errore laterale (cross-track error)
+    double e_y_body = -s * ex_w + c * ey_w;
+
+    // 3. Legge di Controllo (Trajectory Tracking)
+    // Usa Feedforward (v_d, omega_d) + Feedback sugli errori Body Frame
+    
+    // Controllo Velocità Lineare:
+    // v_d * cos(e_theta) riduce la velocità se siamo storti
+    // K_P * e_x_body corregge la posizione longitudinale
+    double ctrl_v = v_d * cos(e_theta) + params_.K_P * e_x_body;
+
+    // Controllo Velocità Angolare:
+    // omega_d: feedforward dalla pianificazione (curva prevista)
+    // K_THETA * sin(e_theta): corregge l'orientamento
+    // K_LAT * e_y_body: corregge l'errore laterale (la "deriva")
+    // Usiamo params_.K_THETA come base per il guadagno laterale per semplicità
+    // Un guadagno extra per e_y aiuta a rientrare in traiettoria velocemente.
+    double ky = params_.K_THETA; // O un valore più alto se serve, es. 3.0
+    
+    double ctrl_omega = omega_d + params_.K_THETA * sin(e_theta) + ky * e_y_body;
 
     if (verbose) {
-        std::cout << "e_x: " << e_x << ", e_y: " << e_y << ", e_theta: " << e_theta << std::endl;
+        std::cout << "e_x_b: " << e_x_body << ", e_y_b: " << e_y_body << ", e_theta: " << e_theta << std::endl;
         std::cout << "ctrl_v: " << ctrl_v << ", ctrl_omega: " << ctrl_omega << std::endl;
     }
 
