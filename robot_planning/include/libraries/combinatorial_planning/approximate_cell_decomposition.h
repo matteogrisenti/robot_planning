@@ -16,8 +16,8 @@
  */
 std::shared_ptr<Roadmap> approximateCellDecomposition(
     const Map& map, 
-    int maxDepth = 4,
-    double minCellSize = 0.5
+    int maxDepth = 10,
+    double minCellSize = 0.1
 );
 
 

@@ -59,7 +59,7 @@ std::shared_ptr<Roadmap> maximumClearanceRoadmap(const Map& map) {
 
     // --- 3. CONVERSIONE DENSA (Sampling) ---
     // Invece di mappare 1:1 i vertici Voronoi, creiamo nodi intermedi sugli archi lunghi.
-    double sampling_density = 0.5; // Un nodo ogni 0.5 metri
+    double sampling_density = 0.25; // Un nodo ogni 0.5 metri
 
     // Funzione helper per trovare o creare nodi (evita duplicati vicini)
     auto get_or_create_node = [&](double x, double y) {

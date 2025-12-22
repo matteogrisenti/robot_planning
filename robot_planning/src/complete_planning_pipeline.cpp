@@ -46,7 +46,7 @@ std::vector<int> optimizePath(const std::vector<int>& rawPath, const Roadmap& ro
     
     // INCREASED MARGIN: Account for Dubins curve bulge
     double safety_margin = 0.65;  // Aumentato da 0.35 a 0.65
-    double min_node_dist = 0.8; 
+    double min_node_dist = 1.5; 
 
     while (currentIdx < rawPath.size() - 1) {
         bool shortcutFound = false;
@@ -100,7 +100,7 @@ int main(int argc, char **argv) {
     }
 
     std::string planner_type;
-    nh.param<std::string>("planner_type", planner_type, "rrt"); 
+    nh.param<std::string>("planner_type", planner_type, "spr"); 
     std::string general_output_dir = "src/robot_planning/robot_planning/src/test/";
     double robot_velocity = 0.5;   
     double turning_radius = 0.4;   

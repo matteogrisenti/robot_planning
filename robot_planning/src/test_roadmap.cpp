@@ -29,7 +29,7 @@ int main(int argc, char **argv)
         map_builder::MapBuilder builder(nh, 1000.0);
         Map map = builder.buildMap();
 
-        // Percorsi di output basati sui file originali (Notare l'incoerenza dei path originali mantenuta)
+        // Percorsi di output basati sui file originali 
         //std::string combinatorial_base_path = "src/robot_planning/src/libraries/combinatorial_planning/test/";
         //std::string sample_base_path = "src/robot_planning/src/libraries/sample_based_planning/test/";
         std::string combinatorial_base_path = "src/robot_planning/robot_planning/src/libraries/combinatorial_planning/test/";
