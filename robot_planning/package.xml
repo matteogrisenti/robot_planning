@@ -77,4 +77,5 @@
     <exec_depend>nav_msgs</exec_depend>  
     <exec_depend>dubins_planner</exec_depend>  
     <exec_depend>map_library</exec_depend>
+    <exec_depend>gazebo_msgs</exec_depend>
 </package>

@@ -50,5 +50,5 @@ void DubinsClient::activeCb() {
 
 void DubinsClient::feedbackCb(const dubins_planner::FollowDubinsFeedbackConstPtr& feedback) {
     // Verbose feedback log
-    ROS_INFO("[Dubins Client] Dist to goal: %.2f | Status: %s", feedback->distance_to_goal, feedback->status.c_str());
+    //ROS_INFO("[Dubins Client] Dist to goal: %.2f | Status: %s", feedback->distance_to_goal, feedback->status.c_str());
 }
