@@ -31,13 +31,21 @@ namespace PlanningUtils {
 
     // Calculates the Euclidean distance to the nearest obstacle boundary
     double distanceToNearestObstacle(const Vertex& point, const std::vector<Obstacle>& obstacles);
+    
+    // It checks if the segment between p1 and p2 is free from obstacles with a minimum clearance
+    bool isSegmentSafe(const Vertex& p1, const Vertex& p2, const std::vector<Obstacle>& obstacles, double min_clearance);
 
     // Checks if a vertex is already in a list (with epsilon tolerance)
     bool containsVertex(const std::vector<Vertex>& list, const Vertex& p, double epsilon = 1e-5);
 
     // Check if a point is navigable (inside map borders, outside obstacles)
     bool isPointValid(double x, double y, const Map& map);
-
+    
+    // Integrate a position into the roadmap, connecting it to nearby nodes if possible
+    void integratePosition( std::shared_ptr<Roadmap>& roadmap, const Vertex& pos, const std::vector<Obstacle>& obstacles, const std::string& label);
+    
+    // Optimize a path
+    std::vector<int> optimizePath(const std::vector<int>& rawPath, const Roadmap& roadmap, const std::vector<Obstacle>& obstacles, double SAFETY_MARGIN=0.5);
 }
 
 #endif // PLANNING_UTILS_H

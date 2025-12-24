@@ -68,97 +68,9 @@ void odomCallback(const nav_msgs::Odometry::ConstPtr& msg) {
     odom_active = true;
 }
 
-// --- HELPER DI PIANIFICAZIONE (Standard) ---
-bool isSegmentSafe(const Vertex& p1, const Vertex& p2, const std::vector<Obstacle>& obstacles, double min_clearance) {
-    if (PlanningUtils::lineSegmentIntersectsObstacle(p1, p2, obstacles)) return false;
-    double dist = std::hypot(p2.x - p1.x, p2.y - p1.y);
-    int steps = std::max(2, (int)(dist / 0.05)); 
-    for (int i = 0; i <= steps; ++i) {
-        double t = (double)i / steps;
-        Vertex p(p1.x + t*(p2.x - p1.x), p1.y + t*(p2.y - p1.y));
-        if (PlanningUtils::distanceToNearestObstacle(p, obstacles) < min_clearance) return false; 
-    }
-    return true;
-}
 
-std::vector<int> optimizePath(const std::vector<int>& rawPath, const Roadmap& roadmap, const std::vector<Obstacle>& obstacles) {
-    if (rawPath.size() < 2) return rawPath;
-    std::vector<int> optimized;
-    optimized.push_back(rawPath[0]);
-    int currentIdx = 0;
-    while (currentIdx < rawPath.size() - 1) {
-        bool shortcutFound = false;
-        for (int i = rawPath.size() - 1; i > currentIdx + 1; --i) {
-            const Vertex& vStart = roadmap.getVertex(rawPath[currentIdx]);
-            const Vertex& vEnd = roadmap.getVertex(rawPath[i]);
-            if (isSegmentSafe(vStart, vEnd, obstacles, 0.90)) {
-                optimized.push_back(rawPath[i]);
-                currentIdx = i;
-                shortcutFound = true;
-                break;
-            }
-        }
-        if (!shortcutFound) {
-            optimized.push_back(rawPath[currentIdx + 1]);
-            currentIdx++;
-        }
-    }
-    if (optimized.size() > 2) {
-        std::vector<int> filtered;
-        filtered.push_back(optimized[0]);
-        for (size_t i = 1; i < optimized.size() - 1; ++i) {
-            const Vertex& prev = roadmap.getVertex(filtered.back());
-            const Vertex& curr = roadmap.getVertex(optimized[i]);
-            if (std::hypot(curr.x - prev.x, curr.y - prev.y) > 1.0) {
-                filtered.push_back(optimized[i]);
-            }
-        }
-        filtered.push_back(optimized.back());
-        return filtered;
-    }
-    return optimized;
-}
 
-double normalizeAngle(double angle) {
-    while (angle > M_PI) angle -= 2.0 * M_PI;
-    while (angle < -M_PI) angle += 2.0 * M_PI;
-    return angle;
-}
 
-void integratePosition(std::shared_ptr<Roadmap>& roadmap, const Vertex& pos, const std::vector<Obstacle>& obstacles, const std::string& label) {
-    for(int i=0; i<roadmap->getNumVertices(); ++i) {
-        if(roadmap->getVertex(i).distance(pos) < 0.05) return; 
-    }
-    int newIdx = roadmap->addVertex(pos);
-    double search_radius = 15.0; 
-    std::vector<std::pair<double, int>> neighbors;
-    for(int i=0; i<roadmap->getNumVertices(); ++i) {
-        if(i == newIdx) continue;
-        double d = roadmap->getVertex(i).distance(pos);
-        if(d < search_radius) neighbors.push_back({d, i});
-    }
-    std::sort(neighbors.begin(), neighbors.end());
-    std::vector<double> margins = {0.90, 0.60, 0.30}; 
-    int connected_count = 0;
-    for (double margin : margins) {
-        if (connected_count >= 3) break;
-        for(const auto& pair : neighbors) {
-            if (connected_count >= 15) break; 
-            int targetIdx = pair.second;
-            bool edgeExists = false;
-            for(const auto& e : roadmap->getEdges(newIdx)) if(e.targetVertex == targetIdx) edgeExists = true;
-            if(edgeExists) continue;
-            bool possible = false;
-            if (margin > 0.0) possible = isSegmentSafe(pos, roadmap->getVertex(targetIdx), obstacles, margin);
-            else possible = !PlanningUtils::lineSegmentIntersectsObstacle(pos, roadmap->getVertex(targetIdx), obstacles);
-            if(possible) {
-                roadmap->addEdge(newIdx, targetIdx, pair.first);
-                roadmap->addEdge(targetIdx, newIdx, pair.first); 
-                connected_count++;
-            }
-        }
-    }
-}
 
 // --- FUNZIONI DI GESTIONE AUTOMATICA ---
 
@@ -191,8 +103,8 @@ void driveBackToStart(DubinsClient& client, const Map& map, std::shared_ptr<Road
     }
 
     // Integriamo Posizione Corrente e Start nella roadmap per trovare il percorso
-    integratePosition(returnRoadmap, currentPose, map.obstacles.get_obstacles(), "ReturnStart");
-    integratePosition(returnRoadmap, INITIAL_START_POSE, map.obstacles.get_obstacles(), "ReturnEnd");
+    PlanningUtils::integratePosition(returnRoadmap, currentPose, map.obstacles.get_obstacles(), "ReturnStart");
+    PlanningUtils::integratePosition(returnRoadmap, INITIAL_START_POSE, map.obstacles.get_obstacles(), "ReturnEnd");
 
     // Troviamo gli indici
     int startIdx = -1, endIdx = -1;
@@ -216,7 +128,7 @@ void driveBackToStart(DubinsClient& client, const Map& map, std::shared_ptr<Road
         ROS_ERROR("No return path found! Driving blindly to start.");
         client.sendGoal(INITIAL_START_POSE.x, INITIAL_START_POSE.y, 0.0, ROBOT_VELOCITY, TURNING_RADIUS);
     } else {
-        path = optimizePath(path, *returnRoadmap, map.obstacles.get_obstacles());
+        path = PlanningUtils::optimizePath(path, *returnRoadmap, map.obstacles.get_obstacles());
         ROS_INFO("Executing Return Path (%lu nodes)...", path.size());
         
         for (size_t i = 0; i < path.size() - 1; ++i) {
@@ -293,17 +205,17 @@ int main(int argc, char **argv) {
             auto t1 = std::chrono::high_resolution_clock::now();
             roadmap = generateRoadmap(planner_type, map);
             
-            integratePosition(roadmap, INITIAL_START_POSE, map.obstacles.get_obstacles(), "Start");
+            PlanningUtils::integratePosition(roadmap, INITIAL_START_POSE, map.obstacles.get_obstacles(), "Start");
             Vertex gatePose(0,0);
             if (!map.gates.get_gates().empty()) {
                 Point g = map.gates.get_gates()[0].get_position();
                 gatePose = Vertex(g.x, g.y);
-                integratePosition(roadmap, gatePose, map.obstacles.get_obstacles(), "Gate");
+                PlanningUtils::integratePosition(roadmap, gatePose, map.obstacles.get_obstacles(), "Gate");
             }
             std::vector<Victim> victims = map.victims.get_victims();
             for(size_t i=0; i<victims.size(); ++i) {
                 Point v = victims[i].get_center();
-                integratePosition(roadmap, Vertex(v.x, v.y), map.obstacles.get_obstacles(), "Victim " + std::to_string(i));
+                PlanningUtils::integratePosition(roadmap, Vertex(v.x, v.y), map.obstacles.get_obstacles(), "Victim " + std::to_string(i));
             }
             res.roadmap_time_ms = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - t1).count();
 
@@ -317,7 +229,7 @@ int main(int argc, char **argv) {
                 std::vector<int> rawSegment = GraphSearch::AStarPlanner::computePath(*roadmap, missionSequence[i], missionSequence[i+1]);
                 if (rawSegment.empty()) continue; 
                 bool isCriticalApproach = (i == missionSequence.size() - 2);
-                std::vector<int> segmentToAdd = isCriticalApproach ? rawSegment : optimizePath(rawSegment, *roadmap, map.obstacles.get_obstacles());
+                std::vector<int> segmentToAdd = isCriticalApproach ? rawSegment : PlanningUtils::optimizePath(rawSegment, *roadmap, map.obstacles.get_obstacles());
                 if (fullGlobalPath.empty()) fullGlobalPath = segmentToAdd;
                 else fullGlobalPath.insert(fullGlobalPath.end(), segmentToAdd.begin() + 1, segmentToAdd.end());
             }

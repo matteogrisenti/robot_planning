@@ -42,24 +42,26 @@ public:
      * @param gates_topic Topic name for gates
      * @param obstacles_topic Topic name for obstacles
      * @param victims_topic Topic name for victims
+     * @param verbose Debug print
      * @return Map object populated with data
      */
     Map buildMap(const std::string& borders_topic,
                  const std::string& odom_topic,
                  const std::string& gates_topic,
                  const std::string& obstacles_topic,
-                 const std::string& victims_topic);
+                 const std::string& victims_topic,
+                 bool verbose = false);
 
 private:
     ros::NodeHandle& nh_;
     double timeout_;
 
     // Processing functions for each message type
-    void processObstacles(const obstacles_msgs::ObstacleArrayMsg::ConstPtr& msg, Map& map);
-    void processMapBorders(const geometry_msgs::Polygon::ConstPtr& msg, Map& map);
-    void processOdometry(const nav_msgs::Odometry::ConstPtr& msg, Map& map);
-    void processGates(const geometry_msgs::PoseArray::ConstPtr& msg, Map& map);
-    void processVictims(const obstacles_msgs::ObstacleArrayMsg::ConstPtr& msg, Map& map);
+    void processObstacles(const obstacles_msgs::ObstacleArrayMsg::ConstPtr& msg, Map& map, bool verbose = false);
+    void processMapBorders(const geometry_msgs::Polygon::ConstPtr& msg, Map& map, bool verbose = false);
+    void processOdometry(const nav_msgs::Odometry::ConstPtr& msg, Map& map, bool verbose = false);
+    void processGates(const geometry_msgs::PoseArray::ConstPtr& msg, Map& map, bool verbose = false);
+    void processVictims(const obstacles_msgs::ObstacleArrayMsg::ConstPtr& msg, Map& map, bool verbose = false);
 };
 
 } // namespace map_builder

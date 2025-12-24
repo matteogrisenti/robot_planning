@@ -1,6 +1,7 @@
 #include <limits>
 #include <algorithm>
 #include <cmath>
+#include <ros/ros.h>
 
 #include "planning_utils.h"
 
@@ -129,6 +130,24 @@ namespace PlanningUtils {
         return minDist;
     }
 
+
+    // It checks if the segment between p1 and p2 is free from obstacles with a minimum clearance
+    bool isSegmentSafe(const Vertex& p1, const Vertex& p2, const std::vector<Obstacle>& obstacles, double min_clearance) {
+        if (PlanningUtils::lineSegmentIntersectsObstacle(p1, p2, obstacles)) return false;
+        
+        double dist = std::hypot(p2.x - p1.x, p2.y - p1.y);
+        int steps = std::max(2, (int)(dist / 0.05));
+
+        // Check points along the segment for minimum clearance
+        for (int i = 0; i <= steps; ++i) {
+            double t = (double)i / steps;
+            Vertex p(p1.x + t*(p2.x - p1.x), p1.y + t*(p2.y - p1.y));
+            if (PlanningUtils::distanceToNearestObstacle(p, obstacles) < min_clearance)
+                return false;
+        }
+        return true;
+    }
+
     // Helpers to extract Roadmap Node from Cell
     Vertex toVertex(const Point& p) { return Vertex(p.x, p.y); }
 
@@ -197,6 +216,124 @@ namespace PlanningUtils {
 
         // 2. Must be OUTSIDE all obstacles
         return !PlanningUtils::pointInAnyObstacle(Vertex(x, y), map.obstacles.get_obstacles());
+    }
+
+
+    // Integrate a position into the roadmap, connecting it to nearby nodes if possible
+    void integratePosition(
+        std::shared_ptr<Roadmap>& roadmap, const Vertex& pos, const std::vector<Obstacle>& obstacles, const std::string& label) {
+    
+        // Check if position already exists
+        if(PlanningUtils::containsVertex(
+            std::vector<Vertex>(roadmap->getNumVertices()), pos, 0.05)) {
+            return; // Already present
+        }
+
+        // Check if position is valid
+        if(!PlanningUtils::isPointValid(pos.x, pos.y, *(roadmap->getMap()))) {
+            return; // Invalid position
+        }
+        
+        // Add new vertex
+        int newIdx = roadmap->addVertex(pos);
+        double search_radius = 15.0;                        // Search radius for neighbors
+        std::vector<std::pair<double, int>> neighbors;
+        
+        // Find nearby vertices
+        for (int i = 0; i < roadmap->getNumVertices(); ++i) {
+            if (i == newIdx) continue;
+            double d = roadmap->getVertex(i).distance(pos);     // Distance to new position
+            if (d < search_radius) neighbors.push_back({d, i});
+        }
+        std::sort(neighbors.begin(), neighbors.end());  // Sort by distance
+        
+        // Try to connect to neighbors with varying safety margins
+        std::vector<double> margins = {0.90, 0.60, 0.30};   // Safety margins in meters
+        int connected_count = 0;
+
+        for (double margin : margins) {
+
+            // Stop if already connected enough: 3 connections
+            if (connected_count >= 3) break;  
+            
+            // Attempt connections between new vertex and neighbors
+            for (const auto& pair : neighbors) {
+
+                // Limit total connections to 15
+                if (connected_count >= 15) break;   
+                
+                int targetIdx = pair.second; 
+                bool edgeExists = false;
+
+                // Check if edge already exists
+                for (const auto& e : roadmap->getEdges(newIdx))
+                    if (e.targetVertex == targetIdx) edgeExists = true;
+                if (edgeExists) continue;
+                
+                // Check if the segment is safe
+                bool possible = false;
+                if (margin > 0.0)
+                    possible = PlanningUtils::isSegmentSafe(pos, roadmap->getVertex(targetIdx), obstacles, margin);
+                else
+                    possible = !PlanningUtils::lineSegmentIntersectsObstacle(pos, roadmap->getVertex(targetIdx), obstacles);
+                
+                // Add edge if safe
+                if (possible) {
+                    roadmap->addEdge(newIdx, targetIdx, pair.first);
+                    roadmap->addEdge(targetIdx, newIdx, pair.first);
+                    connected_count++;
+                }
+            }
+        }
+    }
+
+
+    // Optimize path by removing unnecessary waypoints while ensuring safety margins
+    std::vector<int> optimizePath(const std::vector<int>& rawPath, const Roadmap& roadmap, const std::vector<Obstacle>& obstacles, double SAFETY_MARGIN) {
+        if (rawPath.size() < 2) return rawPath;
+        
+        std::vector<int> optimized;         // optimized path
+        optimized.push_back(rawPath[0]);    // initialize the optimized path 
+        int currentIdx = 0;                 
+        
+        // Scroll all the path, and try to find a shorcut between the current point and the 
+        // final point of the path
+        while (currentIdx < rawPath.size() - 1) {
+            bool shortcutFound = false;
+            for (int i = rawPath.size() - 1; i > currentIdx + 1; --i) {
+                const Vertex& vStart = roadmap.getVertex(rawPath[currentIdx]);
+                const Vertex& vEnd = roadmap.getVertex(rawPath[i]);
+
+                if (PlanningUtils::isSegmentSafe(vStart, vEnd, obstacles, SAFETY_MARGIN)) {
+                    optimized.push_back(rawPath[i]);
+                    currentIdx = i;
+                    shortcutFound = true;
+                    ROS_INFO("[PLANNING UTILS]: Shortcut found!");
+                    break;
+                }
+            }
+            if (!shortcutFound) {
+                ROS_INFO("[PLANNING UTILS]: Shortcut not found!");
+                optimized.push_back(rawPath[currentIdx + 1]);
+                currentIdx++;
+            }
+        }
+        
+        //  
+        if (optimized.size() > 2) {
+            std::vector<int> filtered;
+            filtered.push_back(optimized[0]);
+            for (size_t i = 1; i < optimized.size() - 1; ++i) {
+                const Vertex& prev = roadmap.getVertex(filtered.back());
+                const Vertex& curr = roadmap.getVertex(optimized[i]);
+                if (std::hypot(curr.x - prev.x, curr.y - prev.y) > 1.0) {
+                    filtered.push_back(optimized[i]);
+                }
+            }
+            filtered.push_back(optimized.back());
+            return filtered;
+        }
+        return optimized;
     }
 
 }
