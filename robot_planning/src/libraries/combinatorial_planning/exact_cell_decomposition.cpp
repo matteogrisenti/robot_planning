@@ -6,9 +6,8 @@
 #include <iostream>
 #include <ros/ros.h>
 
-// Forward Declaration per la firma aggiornata
 namespace HelperExactDecomposition {
-    struct Segment; // Forward declaration
+    struct Segment; 
     std::vector<Trapezoid> computeTrapezoidalDecomposition(const Map& map, const std::vector<Point>& extraPoints);
     void connectAdjacentTrapezoids(std::vector<Trapezoid>& trapezoids);
 }
@@ -18,69 +17,46 @@ std::shared_ptr<Roadmap> exactCellDecomposition(const Map& map) {
     auto roadmap = std::make_shared<Roadmap>();
     roadmap->setMap(&map);
 
-    // --- 0. PREPARAZIONE TARGETS (Prima della decomposizione) ---
-    // Raccogliamo i punti (Vittime + Gate) per usarli come eventi di taglio verticale
+    // --- 0. PREPARAZIONE TARGETS ---
     std::vector<Point> targets;
-    
-    // 1. Gate
     if (!map.gates.get_gates().empty()) {
         targets.push_back(map.gates.get_gates()[0].get_position());
     }
-    // 2. Vittime
     for (const auto& v : map.victims.get_victims()) {
         targets.push_back(v.get_center());
     }
 
-    // --- 1. Compute Decomposition (Target-Aware) ---
-    // Passiamo i target alla funzione di decomposizione affinché crei linee verticali su di essi
+    // --- 1. Compute Decomposition ---
     std::vector<Trapezoid> trapezoids = HelperExactDecomposition::computeTrapezoidalDecomposition(map, targets);
-    
-    // Link it to the roadmap for plotting
     roadmap->debugTrapezoids = std::make_shared<std::vector<Trapezoid>>(trapezoids);
 
-    // 2. Compute Adjacency (Neighbors)
+    // 2. Compute Adjacency
     HelperExactDecomposition::connectAdjacentTrapezoids(trapezoids);
 
     // 3. Build Roadmap Graph
     std::vector<int> trapIdToNodeId(trapezoids.size());
-    
-    // A. Aggiungi tutti i centroidi come nodi base
     for (size_t i = 0; i < trapezoids.size(); ++i) {
         trapIdToNodeId[i] = roadmap->addVertex(trapezoids[i].center);
     }
 
-    // B. Aggiungi i nodi Target al grafo e collegali
-    // Ora che la decomposizione è spezzata sulle X dei target, il target si troverà
-    // molto probabilmente sul bordo verticale condiviso o esattamente al centro di una split.
+    // Collega i target
     for (const auto& p : targets) {
         Vertex t(p.x, p.y);
         int tNodeIdx = roadmap->addVertex(t);
         bool connected = false;
 
-        // Cerca il trapezio contenitore
         for(size_t i = 0; i < trapezoids.size(); ++i) {
             const auto& tr = trapezoids[i];
-            
-            // Check Bounding Box Trapezio
-            // Nota: con la nuova logica, il target sarà probabilmente su un bordo (leftX o rightX)
-            // Usiamo un epsilon un po' più largo per catturarlo
             double eps = 1e-3;
             if (t.x >= tr.leftX - eps && t.x <= tr.rightX + eps) {
-                // Stima Y min/max del trapezio a quella X (approssimazione bounding box verticale)
                 double minY = std::min(tr.bottomLeftY, tr.bottomRightY);
                 double maxY = std::max(tr.topLeftY, tr.topRightY);
-                
                 if (t.y >= minY - eps && t.y <= maxY + eps) {
-                    // Collega al centroide del trapezio
                     roadmap->addEdge(tNodeIdx, trapIdToNodeId[i], true);
                     connected = true;
-                    // Non facciamo break: se il target è sul bordo condiviso tra due trapezi,
-                    // lo colleghiamo a entrambi! Questo è ottimo per la navigazione.
                 }
             }
         }
-
-        // Fallback robusto: se per qualche motivo geometrico (es. target fuori bordo di poco) fallisce
         if (!connected) {
              int nearest = -1; 
              double minDist = std::numeric_limits<double>::max();
@@ -91,6 +67,9 @@ std::shared_ptr<Roadmap> exactCellDecomposition(const Map& map) {
              if(nearest != -1) roadmap->addEdge(tNodeIdx, nearest, true);
         }
     }
+
+    // --- DEFINIZIONE VARIABILE MANCANTE ---
+    double min_passage_width = 0.70; 
 
     // 4. Connect Trapezoids via Gateways
     for (size_t i = 0; i < trapezoids.size(); ++i) {
@@ -107,11 +86,18 @@ std::shared_ptr<Roadmap> exactCellDecomposition(const Map& map) {
             double t2_y_low  = t1IsLeft ? t2.bottomLeftY : t2.bottomRightY;
             double overlapStart = std::max(t1_y_low, t2_y_low);
             double overlapEnd   = std::min(t1_y_high, t2_y_high);
+            
+            double passage_width = overlapEnd - overlapStart;
+
+            // CHECK LARGHEZZA PASSAGGIO
+            if (passage_width < min_passage_width) {
+                continue; 
+            }
 
             Vertex gateway(sharedX, (overlapStart + overlapEnd) / 2.0);
+            if (!PlanningUtils::isPointValid(gateway.x, gateway.y, map, 0.5)) continue;
+            
             int gatewayNodeId = roadmap->addVertex(gateway);
-
-            // Collega gateway ai centroidi
             roadmap->addEdge(trapIdToNodeId[i], gatewayNodeId, true);
             roadmap->addEdge(gatewayNodeId, trapIdToNodeId[neighborIdx], true);
         }
@@ -120,6 +106,7 @@ std::shared_ptr<Roadmap> exactCellDecomposition(const Map& map) {
     return roadmap;
 }
 
+// ... (Il resto del namespace HelperExactDecomposition rimane uguale) ...
 namespace HelperExactDecomposition {
     struct Segment {
         Point p1, p2;
@@ -138,19 +125,17 @@ namespace HelperExactDecomposition {
         return true;
     }
     
-    // --- MODIFICATA: Accetta extraPoints (targets) ---
     std::vector<Trapezoid> computeTrapezoidalDecomposition(const Map& map, const std::vector<Point>& extraPoints) {
         std::vector<Trapezoid> result;
         std::vector<Segment> allSegments;
         std::set<double> x_events;
 
-        // Funzione helper locale per processare poligoni
         auto processPolygon = [&](const std::vector<Point>& pts) {
             if (pts.empty()) return;
             for (size_t i = 0; i < pts.size(); ++i) {
                 Point p1 = pts[i];
                 Point p2 = pts[(i + 1) % pts.size()];
-                x_events.insert(p1.x); // Aggiungi coordinata X come evento
+                x_events.insert(p1.x); 
                 if (p1.x > p2.x) std::swap(p1, p2);
                 if (std::abs(p2.x - p1.x) > 1e-9) {
                     allSegments.push_back({p1, p2});
@@ -158,22 +143,17 @@ namespace HelperExactDecomposition {
             }
         };
 
-        // 1. Processa Muri e Ostacoli
         processPolygon(map.borders.get_points());
         for (const auto& obs : map.obstacles.get_obstacles()) {
             processPolygon(obs.get_points());
         }
 
-        // 2. --- NUOVO: Processa Extra Points (Target) ---
-        // Aggiungiamo le loro coordinate X agli eventi. 
-        // Questo forzerà la creazione di una linea verticale in corrispondenza del target.
         for (const auto& p : extraPoints) {
             x_events.insert(p.x);
         }
 
         std::vector<double> sortedX(x_events.begin(), x_events.end());
 
-        // 3. Sweep Line Loop
         for (size_t i = 0; i < sortedX.size() - 1; ++i) {
             double x_start = sortedX[i];
             double x_end = sortedX[i+1];

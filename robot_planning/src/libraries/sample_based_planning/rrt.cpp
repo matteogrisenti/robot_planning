@@ -102,6 +102,9 @@ namespace sample_planning {
             } else {
                 // Campionamento uniforme
                 q_rand = Vertex(disX(gen), disY(gen));
+               if (!PlanningUtils::isPointValid(q_rand.x, q_rand.y, map, 0.5)) {
+                    continue; 
+                }
             }
 
             // Check validità campione (CLEAR)
@@ -116,9 +119,9 @@ namespace sample_planning {
             // EXTEND
             Vertex q_new = steer(q_near, q_rand, config.step_size);
 
-            // COLLISION CHECK (Punto e Segmento)
-            if (PlanningUtils::pointInAnyObstacle(q_new, obstacles)) continue;
-            if (!PlanningUtils::pointInPolygon(q_new, borderPoly)) continue;
+            if (!PlanningUtils::isPointValid(q_new.x, q_new.y, map, 0.5)) {
+                continue;
+            }
             if (PlanningUtils::lineSegmentIntersectsObstacle(q_near, q_new, obstacles)) continue;
 
             // ADD VERTEX & EDGE

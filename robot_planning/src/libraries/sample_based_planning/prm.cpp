@@ -6,20 +6,9 @@
 
 namespace sample_planning {
 
-    // Helper: Check if a point is valid (Inside borders, Outside obstacles)
     bool isConfigurationFree(const Vertex& p, const Map& map) {
-        // 1. Check Borders (Must be inside)
-        std::vector<Vertex> borderPoly;
-        for(const auto& bp : map.borders.get_points()) {
-            borderPoly.push_back(Vertex(bp.x, bp.y));
+            return PlanningUtils::isPointValid(p.x, p.y, map, 0.5);
         }
-        if (!PlanningUtils::pointInPolygon(p, borderPoly)) return false;
-
-        // 2. Check Obstacles (Must be outside)
-        if (PlanningUtils::pointInAnyObstacle(p, map.obstacles.get_obstacles())) return false;
-
-        return true;
-    }
 
     std::shared_ptr<Roadmap> buildPRM(const Map& map, const PRMConfig& config) {
         auto roadmap = std::make_shared<Roadmap>();

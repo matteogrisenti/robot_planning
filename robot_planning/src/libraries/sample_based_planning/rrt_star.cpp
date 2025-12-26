@@ -92,6 +92,9 @@ namespace sample_planning {
                 q_rand = targets[tIdx];
             } else {
                 q_rand = Vertex(disX(gen), disY(gen));
+                if (!PlanningUtils::isPointValid(q_rand.x, q_rand.y, map, 0.5)) {
+                    continue; 
+                }
             }
 
             // Nearest
@@ -106,8 +109,9 @@ namespace sample_planning {
             Vertex q_new = steer_s(q_near, q_rand, config.step_size);
 
             // 3. Check Validity
-            if (!PlanningUtils::pointInPolygon(q_new, borderPoly)) continue;
-            if (PlanningUtils::pointInAnyObstacle(q_new, obstacles)) continue;
+            if (!PlanningUtils::isPointValid(q_new.x, q_new.y, map, 0.5)) {
+                continue;
+            }
             if (PlanningUtils::lineSegmentIntersectsObstacle(q_near, q_new, obstacles)) continue;
 
             // --- RRT* START ---

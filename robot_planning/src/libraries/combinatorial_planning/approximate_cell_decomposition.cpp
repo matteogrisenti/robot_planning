@@ -7,17 +7,18 @@
 #include <limits>
 
 namespace HelperAproximateCellDecomposition {
-    // Forward declaration per poterla usare nel main
+    // Forward declaration 
     void recursiveDecomposition(const Cell& currentCell, const Map& map, 
                                 int depth, int maxDepth, double minCellSize, 
                                 std::vector<Cell>& freeCells,
                                 const std::vector<Point>& targets);
     
-    // Altre forward declaration
+    // Altre forward declaration corrette
     bool cellIntersectsObstacle(const Cell& cell, const Map& map);
     bool cellOutsideCheck(const Cell& cell, const Map& map);
     Vertex calculateRefinedCentroid(const Cell& cell, const Map& map);
-    void connectAdjacentCells(const std::vector<Cell>& cells, std::shared_ptr<Roadmap> roadmap);
+    // Firma corretta per accettare la mappa dei nodi validi
+    void connectAdjacentCells(const std::vector<Cell>& cells, std::shared_ptr<Roadmap> roadmap, const std::vector<int>& mapping);
 }
 
 // Main Algorithm
@@ -27,7 +28,6 @@ std::shared_ptr<Roadmap> approximateCellDecomposition(const Map& map, int maxDep
     std::vector<Cell> freeCells;
 
     // --- 0. PREPARAZIONE TARGETS ---
-    // Raccogliamo tutti i target (Vittime + Gate) per guidare la decomposizione
     std::vector<Point> targets;
     if (!map.gates.get_gates().empty()) {
         targets.push_back(map.gates.get_gates()[0].get_position());
@@ -36,34 +36,38 @@ std::shared_ptr<Roadmap> approximateCellDecomposition(const Map& map, int maxDep
         targets.push_back(v.get_center());
     }
 
-    // 1. Define the Root Cell (Map Bounding Box)
+    // 1. Define the Root Cell
     double minX, minY, maxX, maxY;
     map.get_bounding_box(minX, minY, maxX, maxY);
     Cell root(minX, minY, maxX, maxY);
 
-    // 2. Perform Recursive Decomposition (Target-Driven)
+    // 2. Perform Recursive Decomposition
     HelperAproximateCellDecomposition::recursiveDecomposition(root, map, 0, maxDepth, minCellSize, freeCells, targets);
     roadmap->debugCells = std::make_shared<std::vector<Cell>>(freeCells);
 
     // 3. Convert Free Cells to Roadmap Nodes
+    std::vector<int> cellIndexToNodeId(freeCells.size(), -1);
+    double safety_margin = 0.35; // Margine di sicurezza
+
     for (size_t i = 0; i < freeCells.size(); ++i) {
-        // Calcolo base del nodo (centroide)
         Vertex nodePos = HelperAproximateCellDecomposition::calculateRefinedCentroid(freeCells[i], map);
         
-        // --- LOGICA DI SOVRAPPOSIZIONE TARGET ---
-        // Se la cella contiene un target, spostiamo il nodo ESATTAMENTE sul target.
-        // Questo garantisce che il robot passi sopra la vittima, non solo "vicino".
+        // Sovrapposizione Target
         for (const auto& t : targets) {
             if (freeCells[i].contains(Vertex(t.x, t.y))) {
                 nodePos = Vertex(t.x, t.y);
-                break; // Un target per cella è sufficiente dato che sono piccole
+                break; 
             }
         }
-        roadmap->addVertex(nodePos);
+
+        // QUI IL CHECK DI SICUREZZA (Correttamente posizionato)
+        if (PlanningUtils::isPointValid(nodePos.x, nodePos.y, map, safety_margin)) {
+            cellIndexToNodeId[i] = roadmap->addVertex(nodePos);
+        }
     }
 
-    // 4. Connect Adjacent Cells
-    HelperAproximateCellDecomposition::connectAdjacentCells(freeCells, roadmap);
+    // 4. Connect Adjacent Cells (passando la mapping)
+    HelperAproximateCellDecomposition::connectAdjacentCells(freeCells, roadmap, cellIndexToNodeId);
 
     return roadmap;
 }
@@ -80,7 +84,6 @@ namespace HelperAproximateCellDecomposition {
         
         if (fullyOutside) return; 
 
-        // Check presenza Target nella cella corrente
         bool containsTarget = false;
         for(const auto& t : targets) {
             if (currentCell.contains(Vertex(t.x, t.y))) {
@@ -89,8 +92,6 @@ namespace HelperAproximateCellDecomposition {
             }
         }
 
-        // CONDIZIONE DI STOP:
-        // Ci fermiamo se la cella è libera E non dobbiamo raffinare per un target
         if (!intersects && !containsTarget) {
             freeCells.push_back(currentCell);
             return;
@@ -99,24 +100,13 @@ namespace HelperAproximateCellDecomposition {
         double width = currentCell.maxX - currentCell.minX;
         double height = currentCell.maxY - currentCell.minY;
 
-        // Limite fisico di ricorsione
         if (depth >= maxDepth || width <= minCellSize || height <= minCellSize) {
-            // Accettiamo la cella se è libera, OPPURE se contiene un target (anche se parzialmente ostruita,
-            // ci fidiamo che il target sia in uno spazio libero puntuale, utile per "avvicinarsi" il più possibile)
-            // Per sicurezza qui accettiamo solo se non interseca totalmente un ostacolo.
             if (!intersects || containsTarget) {
-                 // Nota: se containsTarget è true ma intersects è true, stiamo accettando una cella "sporca".
-                 // Idealmente il target è in free space, quindi intersects dovrebbe essere false localmente.
                  if (!intersects) freeCells.push_back(currentCell);
-                 else {
-                     // Caso limite: Target molto vicino a ostacolo.
-                     // Proviamo a salvarla se il centroide è libero? Per ora scartiamo per sicurezza collisioni.
-                 }
             }
             return; 
         }
 
-        // Suddivisione Quadtree
         double midX = (currentCell.minX + currentCell.maxX) / 2.0;
         double midY = (currentCell.minY + currentCell.maxY) / 2.0;
 
@@ -128,12 +118,10 @@ namespace HelperAproximateCellDecomposition {
 
     bool cellIntersectsObstacle(const Cell& cell, const Map& map) {
         for (const auto& obs : map.obstacles.get_obstacles()) {
-            // 1. Punti ostacolo dentro la cella
             for (const auto& p : obs.get_points()) {
                 Vertex v(p.x, p.y);
                 if (cell.contains(v)) return true;
             }
-            // 2. Angoli cella dentro l'ostacolo (e centro)
             Vertex corners[5] = {
                 cell.center,
                 {cell.minX, cell.minY}, {cell.maxX, cell.minY},
@@ -156,15 +144,9 @@ namespace HelperAproximateCellDecomposition {
         for(const auto& p : map.borders.get_points())
             mapPoly.push_back(PlanningUtils::toVertex(p));
 
-        // Se anche un solo angolo è fuori dal bordo mappa, controlliamo
-        // (Semplificazione: se un angolo è dentro, non siamo fully outside)
         for (const Vertex corner : corners) {
-            if (PlanningUtils::pointInPolygon(corner, mapPoly)) {
-                return false; 
-            }
+            if (PlanningUtils::pointInPolygon(corner, mapPoly)) return false; 
         }
-
-        // Caso inverso: la mappa è contenuta nella cella (cella enorme)
         for (const Vertex mapCorner : mapPoly) {
             if (mapCorner.x >= cell.minX && mapCorner.x <= cell.maxX &&
                 mapCorner.y >= cell.minY && mapCorner.y <= cell.maxY) {
@@ -179,11 +161,8 @@ namespace HelperAproximateCellDecomposition {
         for(const auto& p : map.borders.get_points())
             mapPoly.push_back(PlanningUtils::toVertex(p));
 
-        if (PlanningUtils::pointInPolygon(cell.center, mapPoly)) {
-            return cell.center; 
-        }
+        if (PlanningUtils::pointInPolygon(cell.center, mapPoly)) return cell.center; 
 
-        // Calcolo fallback per celle parzialmente fuori bordo
         std::vector<Vertex> overlapVertices;
         std::vector<Vertex> cellCorners = {
             {cell.minX, cell.minY}, {cell.maxX, cell.minY},
@@ -193,7 +172,6 @@ namespace HelperAproximateCellDecomposition {
         for (const auto& p : cellCorners) {
             if (PlanningUtils::pointInPolygon(p, mapPoly)) overlapVertices.push_back(p);
         }
-        // (Logica semplificata per brevità, quella originale va bene)
         if (overlapVertices.empty()) return cell.center;
         
         double sumX = 0, sumY = 0;
@@ -201,10 +179,14 @@ namespace HelperAproximateCellDecomposition {
         return Vertex(sumX / overlapVertices.size(), sumY / overlapVertices.size());
     }
 
-    void connectAdjacentCells(const std::vector<Cell>& cells, std::shared_ptr<Roadmap> roadmap) {
+    void connectAdjacentCells(const std::vector<Cell>& cells, std::shared_ptr<Roadmap> roadmap, const std::vector<int>& mapping) {
         double eps = 1e-4;
         for (size_t i = 0; i < cells.size(); ++i) {
+            if (mapping[i] == -1) continue; // SKIP NODI INVALIDI
+
             for (size_t j = i + 1; j < cells.size(); ++j) {
+                if (mapping[j] == -1) continue; // SKIP NODI INVALIDI
+
                 const Cell& c1 = cells[i];
                 const Cell& c2 = cells[j];
 
@@ -214,7 +196,7 @@ namespace HelperAproximateCellDecomposition {
                 bool touchingY = std::abs(c1.maxY - c2.minY) < eps || std::abs(c1.minY - c2.maxY) < eps;
 
                 if ((overlapX && touchingY) || (overlapY && touchingX)) {
-                    roadmap->addEdge(i, j, true);
+                    roadmap->addEdge(mapping[i], mapping[j], true);
                 }
             }
         }

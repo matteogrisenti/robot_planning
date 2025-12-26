@@ -13,7 +13,7 @@ std::shared_ptr<Roadmap> generateRoadmap(const std::string& type, const Map& map
     else if (type == "ecd") return exactCellDecomposition(map);
     else if (type == "acd") return approximateCellDecomposition(map, 4);
     else if (type == "mcr") return maximumClearanceRoadmap(map);
-    else if (type == "spr") return shortestPathRoadmap(map, 0.0);
+    else if (type == "spr") return shortestPathRoadmap(map, 0.5);
     else if (type == "rrt") {
         sample_planning::RRTConfig config; 
         config.max_iterations = 3000; 

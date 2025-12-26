@@ -84,7 +84,9 @@ std::shared_ptr<Roadmap> maximumClearanceRoadmap(const Map& map) {
             double x1 = v1->x() / HelperMaxClearanceRoadmap::SCALING_FACTOR;
             double y1 = v1->y() / HelperMaxClearanceRoadmap::SCALING_FACTOR;
 
-            if (PlanningUtils::isPointValid(x0, y0, map) && PlanningUtils::isPointValid(x1, y1, map)) {
+            bool safeStart = PlanningUtils::isPointValid(x0, y0, map, 0.5);
+            bool safeEnd   = PlanningUtils::isPointValid(x1, y1, map, 0.5);
+            if (safeStart && safeEnd) {
                 
                 // Calcola lunghezza e passi di campionamento
                 double dist = std::hypot(x1 - x0, y1 - y0);

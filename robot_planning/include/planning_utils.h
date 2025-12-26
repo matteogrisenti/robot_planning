@@ -39,7 +39,7 @@ namespace PlanningUtils {
     bool containsVertex(const std::vector<Vertex>& list, const Vertex& p, double epsilon = 1e-5);
 
     // Check if a point is navigable (inside map borders, outside obstacles)
-    bool isPointValid(double x, double y, const Map& map);
+    bool isPointValid(double x, double y, const Map& map, double min_clearance = 0.0);
     
     // Integrate a position into the roadmap, connecting it to nearby nodes if possible
     void integratePosition( std::shared_ptr<Roadmap>& roadmap, const Vertex& pos, const std::vector<Obstacle>& obstacles, const std::string& label);
