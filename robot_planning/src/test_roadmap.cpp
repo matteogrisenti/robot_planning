@@ -154,8 +154,8 @@ int main(int argc, char **argv)
             ROS_INFO("--- Test 2.3: RRT* ---");
             sample_planning::RRTStarConfig config;
             config.max_iterations = 2000;
-            config.step_size = 1.0;
-            config.search_radius = 2.0;
+            config.step_size = 0.4; // Equal to TURNING_RADIUS of the robot
+            config.search_radius = 1.2; // 2x or 3x of step_size
 
             if (!map.gates.get_gates().empty()) {
                 Point g = map.gates.get_gates()[0].get_position();

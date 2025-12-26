@@ -16,15 +16,15 @@ std::shared_ptr<Roadmap> generateRoadmap(const std::string& type, const Map& map
     else if (type == "spr") return shortestPathRoadmap(map, 0.5);
     else if (type == "rrt") {
         sample_planning::RRTConfig config; 
-        config.max_iterations = 3000; 
+        config.max_iterations = 2000; 
         config.step_size = 0.5;
         return sample_planning::buildRRT(map, config);
     }
     else if (type == "rrt_star") {
         sample_planning::RRTStarConfig config; 
-        config.max_iterations = 3000; 
-        config.step_size = 0.5;
-        config.search_radius = 2.0;
+        config.max_iterations = 2000; 
+        config.step_size = 0.4;
+        config.search_radius = 1.2;
         return sample_planning::buildRRTStar(map, config);
     }
     else {
