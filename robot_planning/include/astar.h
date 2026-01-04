@@ -1,71 +1,51 @@
-#ifndef GRAPH_SEARCH_H
-#define GRAPH_SEARCH_H
+#pragma once
 
 #include <vector>
-#include <map>
-#include <queue>
 #include <cmath>
 #include <algorithm>
-#include <iostream>
+#include <map>
+#include <queue>
 #include <limits>
-
+#include <ros/ros.h> 
 #include "roadmap.h"
-#include "map_library/map_data_structures.h"
+#include "map_library.h"
 
 namespace GraphSearch {
 
-    // --- A* PLANNER (Low Level) ---
-    class AStarPlanner {
-    public:
-        /**
-         * @brief Calcola il percorso ottimo tra due nodi del grafo.
-         * @return std::vector<int> Lista di indici dei nodi (path). Vuoto se fallisce.
-         */
-        static std::vector<int> computePath(const Roadmap& graph, int startNodeIdx, int goalNodeIdx);
-
-    private:
-        struct NodeWrapper {
-            int id;
-            double f_score;
-            bool operator>(const NodeWrapper& other) const { return f_score > other.f_score; }
-        };
-
-        static double heuristic(const Vertex& a, const Vertex& b);
+    // Struttura di supporto per A*
+    struct NodeWrapper {
+        int id;
+        double f_score;
+        // Min-heap priority logic
+        bool operator>(const NodeWrapper& other) const { return f_score > other.f_score; }
     };
 
-    // --- TASK PLANNER (High Level) ---
+    class AStarPlanner {
+    public:
+        static double heuristic(const Vertex& a, const Vertex& b);
+        static std::vector<int> computePath(const Roadmap& graph, int startNodeIdx, int goalNodeIdx);
+    };
+
     class TaskPlanner {
     public:
-        /**
-         * @brief Determina la sequenza di visita: Start -> Vittime (Greedy) -> Gate
-         * * @param graph La Roadmap su cui navigare.
-         * @param startPos Posizione cartesiana del robot.
-         * @param victims Lista delle vittime dalla Mappa.
-         * @param gatePos Posizione cartesiana del Gate (Goal finale).
-         * @return std::vector<int> La sequenza ORDINATA dei nodi del grafo da visitare.
-         * Es: [NodeStart, NodeVictim3, NodeVictim1, NodeGate]
-         */
+        // Trova il nodo più vicino a una coordinata (per ingresso/uscita dal grafo)
+        static int getNearestNodeIdx(const Roadmap& graph, const Vertex& pos);
+
+        // PIANIFICAZIONE MISSIONE CON BUDGET (Target Rescue)
+        // Seleziona un sottoinsieme di vittime massimizzando il valore entro il time_limit.
         static std::vector<int> planMissionSequence(
             const Roadmap& graph, 
             const Vertex& startPos, 
             const std::vector<Victim>& victims, 
-            const Vertex& gatePos
+            const Vertex& gatePos,
+            double time_limit,       // NUOVO: Tempo massimo totale (s)
+            double robot_velocity    // NUOVO: Velocità media stimata (m/s)
         );
 
-    private:
-        // Helper per trovare il nodo del grafo più vicino a un punto fisico
-        static int getNearestNodeIdx(const Roadmap& graph, const Vertex& pos);
+        // Helper per calcolare la distanza di percorrenza reale sul grafo
+        static double getGraphDistance(const Roadmap& graph, int startIdx, int endIdx);
     };
 
-    // --- DEBUG VISUALIZATION ---
-    /**
-     * @brief Publishes the A* plan to RVIZ.
-     * @param path The list of node indices returned by computePath.
-     * @param graph The roadmap used (to get coordinates).
-     * @param pub A valid ros::Publisher for visualization_msgs::Marker.
-     */
+    // Funzione di visualizzazione (definita in rviz_plot_plan.cpp)
     void rviz_plan(const std::vector<int>& path, const Roadmap& graph, const ros::Publisher& pub);
-
 }
-
-#endif // GRAPH_SEARCH_H

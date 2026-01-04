@@ -1,10 +1,7 @@
-Planner	Roadmap_T(s)	Planning_T(s)	Exec_T(s)	Victims	Retries	Success
-prm	0.556	0.003	80.821	5	0	YES
-acd	0.004	0.002	86.814	5	0	YES
-spr	0.002	0	61.209	5	0	YES
-rrt_star	0.194	0.002	4.318	0	8	NO
-rrt_star	0.17	0.002	84.016	6	0	YES
-rrt_star	0.203	0.004	15.145	1	14	NO
-rrt_star	0.203	0.009	11.229	1	4	NO
-rrt_star	0.219	0.004	12.634	1	4	NO
-rrt_star	0.08	0	96.623	5	0	YES
+Planner	Limit(s)	Score	Exec_T(s)	Plan_T(s)	Victims	Retries	Success
+acd	60	806	36.605	0.002	2	0	YES
+rrt_star	60	890	60.409	0.007	3	0	YES
+rrt_star	30	0	20.008	0.005	0	0	YES
+spr	30	410	27.402	0.002	1	0	YES
+prm	30	0	19.21	0.005	0	0	YES
+prm	60	532	55.008	0.029	2	0	YES

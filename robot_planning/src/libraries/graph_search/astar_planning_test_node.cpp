@@ -81,7 +81,10 @@ int main(int argc, char **argv) {
             auto t3 = high_resolution_clock::now();
             
             // Task Planning
-            vector<int> missionSequence = GraphSearch::TaskPlanner::planMissionSequence(*roadmap, startPose, map.victims.get_victims(), gatePose);
+            // FIX: Aggiunti time_limit (120.0s) e robot_velocity (0.5 m/s) di default per il benchmark
+            vector<int> missionSequence = GraphSearch::TaskPlanner::planMissionSequence(
+                *roadmap, startPose, map.victims.get_victims(), gatePose, 120.0, 0.5
+            );
             
             // A* Pathfinding
             vector<int> fullGlobalPath;

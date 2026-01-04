@@ -5,6 +5,7 @@
 #include <fstream>
 #include <vector>
 #include <set> 
+#include <map>
 #include <visualization_msgs/Marker.h>
 #include <cmath>
 #include <nav_msgs/Odometry.h> 
@@ -20,12 +21,12 @@
 #include "planning_utils.h" 
 
 // =============================================================================
-// 1. CONFIGURAZIONE HYPERPARAMETERS (Stile Individual Benchmark)
+// 1. CONFIGURAZIONE HYPERPARAMETERS
 // =============================================================================
 const double ROBOT_VELOCITY = 0.5;       
 const double TURNING_RADIUS = 0.4;
-const int MAX_DUBINS_RETRIES = 3;           // Max retries per nodi critici
-const double SAFETY_MARGIN = 0.90;          // Distanza minima ostacoli (High Res Check)
+const int MAX_DUBINS_RETRIES = 3;           
+const double SAFETY_MARGIN = 0.90;          
 const std::string OUTPUT_DIR = "src/robot_planning/robot_planning/src/test/";
 const std::string METRICS_FILENAME = "benchmark_results.txt";
 
@@ -39,9 +40,11 @@ bool odom_active = false;
 
 struct RunMetrics {
     std::string planner;
+    double time_limit_set;
+    double total_score;     // NUOVO: Punteggio accumulato (somma raggi vittime)
     double t_roadmap;
     double t_total_planning;
-    double t_execution;
+    double t_execution;     // Tempo totale di esecuzione
     int victims_collected;
     int dubins_retries;
     bool success;
@@ -51,7 +54,6 @@ struct RunMetrics {
 // 3. HELPER FUNCTIONS
 // =============================================================================
 
-// Salva metriche su file (Esteso con dati di missione)
 void appendMetricsToFile(const std::string& filepath, const RunMetrics& m) {
     std::ofstream file;
     file.open(filepath, std::ios_base::app); 
@@ -59,13 +61,15 @@ void appendMetricsToFile(const std::string& filepath, const RunMetrics& m) {
     if (file.is_open()) {
         file.seekp(0, std::ios::end);
         if (file.tellp() == 0) {
-            file << "Planner\tRoadmap_T(s)\tPlanning_T(s)\tExec_T(s)\tVictims\tRetries\tSuccess\n";
+            // Header aggiornato con Score e Time Limit
+            file << "Planner\tLimit(s)\tScore\tExec_T(s)\tPlan_T(s)\tVictims\tRetries\tSuccess\n";
         }
         
         file << m.planner << "\t" 
-             << m.t_roadmap << "\t" 
+             << m.time_limit_set << "\t"
+             << m.total_score << "\t"       // Score
+             << m.t_execution << "\t"       // Tempo Totale
              << m.t_total_planning << "\t"
-             << m.t_execution << "\t"
              << m.victims_collected << "\t"
              << m.dubins_retries << "\t"
              << (m.success ? "YES" : "NO") << "\n";
@@ -91,7 +95,6 @@ double normalizeAngle(double angle) {
     return angle;
 }
 
-// Controllo collisioni ad alta risoluzione (da complete_pipeline)
 bool isSegmentSafe(const Vertex& p1, const Vertex& p2, const std::vector<Obstacle>& obstacles, double min_clearance) {
     if (PlanningUtils::lineSegmentIntersectsObstacle(p1, p2, obstacles)) return false;
     double dist = std::hypot(p2.x - p1.x, p2.y - p1.y);
@@ -107,9 +110,7 @@ bool isSegmentSafe(const Vertex& p1, const Vertex& p2, const std::vector<Obstacl
     return true;
 }
 
-// Integrazione robusta con retry su margini diversi (da complete_pipeline)
 void integratePosition(std::shared_ptr<Roadmap>& roadmap, const Vertex& pos, const std::vector<Obstacle>& obstacles, const std::string& label) {
-    // Evita duplicati se il punto è già vicinissimo a un nodo esistente
     for(int i=0; i<roadmap->getNumVertices(); ++i) {
         if(roadmap->getVertex(i).distance(pos) < 0.05) return; 
     }
@@ -125,7 +126,6 @@ void integratePosition(std::shared_ptr<Roadmap>& roadmap, const Vertex& pos, con
     }
     std::sort(neighbors.begin(), neighbors.end());
 
-    // Prova a connettere con margini di sicurezza decrescenti se necessario
     std::vector<double> margins = {SAFETY_MARGIN, 0.60, 0.30}; 
     int connected_count = 0;
     int min_connections = 3; 
@@ -136,7 +136,6 @@ void integratePosition(std::shared_ptr<Roadmap>& roadmap, const Vertex& pos, con
             if (connected_count >= 15) break; 
             int targetIdx = pair.second;
             
-            // Check se arco esiste già
             bool edgeExists = false;
             for(const auto& e : roadmap->getEdges(newIdx)) if(e.targetVertex == targetIdx) edgeExists = true;
             if(edgeExists) continue;
@@ -156,7 +155,6 @@ void integratePosition(std::shared_ptr<Roadmap>& roadmap, const Vertex& pos, con
     else ROS_ERROR("CRITICAL: FAILED to integrate %s!", label.c_str());
 }
 
-// Ottimizzatore percorso (da complete_pipeline)
 std::vector<int> optimizePath(const std::vector<int>& rawPath, const Roadmap& roadmap, const std::vector<Obstacle>& obstacles) {
     if (rawPath.size() < 2) return rawPath;
     std::vector<int> optimized;
@@ -182,7 +180,6 @@ std::vector<int> optimizePath(const std::vector<int>& rawPath, const Roadmap& ro
         }
     }
     
-    // Filtering nodi troppo vicini
     if (optimized.size() > 2) {
         std::vector<int> filtered;
         filtered.push_back(optimized[0]);
@@ -203,7 +200,7 @@ std::vector<int> optimizePath(const std::vector<int>& rawPath, const Roadmap& ro
 // 4. MAIN
 // =============================================================================
 int main(int argc, char **argv) {
-    ros::init(argc, argv, "unified_benchmark_node");
+    ros::init(argc, argv, "individual_benchmark_node");
     ros::NodeHandle nh("~");
     ros::AsyncSpinner spinner(2); 
     spinner.start();
@@ -214,15 +211,21 @@ int main(int argc, char **argv) {
         odom_sub = nh.subscribe("/limo0/odom", 1, odomCallback);
     }
 
-    // Parametro Planner Type (da ROS param)
+    // --- PARAMETRI ROS ---
+    // Esempio uso: rosrun robot_planning individual_benchmark_node _planner_type:=rrt _time_limit:=60.0
+    
     std::string planner_type;
-    nh.param<std::string>("planner_type", planner_type, "acd"); // Default "acd"
+    nh.param<std::string>("planner_type", planner_type, "acd");
+    
+    double time_limit;
+    nh.param<double>("time_limit", time_limit, 120.0); 
     
     ros::Publisher debug_pub = nh.advertise<visualization_msgs::Marker>("/debug_path", 10); 
     DubinsClient dubins_client("/dubins_planner_server/follow_dubins_path");
 
     ROS_WARN("=== BENCHMARK STARTED ===");
-    ROS_INFO("Planner: %s | Vel: %.1f | Safety: %.2f", planner_type.c_str(), ROBOT_VELOCITY, SAFETY_MARGIN);
+    ROS_INFO(">>> SELECTED PLANNER: %s", planner_type.c_str());
+    ROS_INFO(">>> TIME LIMIT: %.1f s", time_limit);
 
     // Attesa Odometria
     ROS_INFO("Waiting for Odometry...");
@@ -236,7 +239,9 @@ int main(int argc, char **argv) {
     ROS_INFO("Start Pose Locked: (%.2f, %.2f)", startPose.x, startPose.y);
 
     RunMetrics metrics;
-    metrics.planner = planner_type;
+    metrics.planner = planner_type; 
+    metrics.time_limit_set = time_limit;
+    metrics.total_score = 0.0; // Init Score
     metrics.victims_collected = 0;
     metrics.dubins_retries = 0;
     metrics.success = false;
@@ -267,15 +272,30 @@ int main(int argc, char **argv) {
             Point v = victims[i].get_center();
             integratePosition(roadmap, Vertex(v.x, v.y), map.obstacles.get_obstacles(), "Victim " + std::to_string(i));
         }
+
+        // --- MAPPA VITTIME PER CALCOLO PUNTEGGIO ---
+        // Associa il nodo del grafo al valore (raggio) della vittima
+        std::map<int, double> victim_score_map;
+        for(const auto& v : victims) {
+            int idx = GraphSearch::TaskPlanner::getNearestNodeIdx(*roadmap, Vertex(v.get_center().x, v.get_center().y));
+            if (idx != -1) {
+                victim_score_map[idx] = v.get_radius();
+            }
+        }
         
         metrics.t_roadmap = (ros::Time::now() - t_start_roadmap).toSec();
-        roadmap->plot(false, true, OUTPUT_DIR + planner_type + "_roadmap.png");
 
-        // --- PHASE 2: PLANNING ---
+        // --- PHASE 2: PLANNING CON BUDGET ---
         ros::Time t_start_plan = ros::Time::now();
         
-        ROS_INFO("Planning Mission Sequence...");
-        std::vector<int> missionSequence = GraphSearch::TaskPlanner::planMissionSequence(*roadmap, startPose, victims, gatePose);
+        ROS_INFO("Planning Mission Sequence (Time Budget: %.1f s)...", time_limit);
+        
+        double conservative_velocity = ROBOT_VELOCITY * 0.85;
+        
+        std::vector<int> missionSequence = GraphSearch::TaskPlanner::planMissionSequence(
+            *roadmap, startPose, victims, gatePose, time_limit, conservative_velocity
+        );
+        
         if (missionSequence.empty()) throw std::runtime_error("Task Planning failed (Sequence empty).");
 
         std::set<int> criticalNodes(missionSequence.begin(), missionSequence.end());
@@ -292,7 +312,6 @@ int main(int argc, char **argv) {
             bool isCriticalApproach = (i == missionSequence.size() - 2);
             std::vector<int> segmentToAdd;
             
-            // Non ottimizzare l'approccio finale al gate per evitare tagli pericolosi
             if (isCriticalApproach) {
                 segmentToAdd = rawSegment;
             } else {
@@ -307,11 +326,7 @@ int main(int argc, char **argv) {
 
         if (fullGlobalPath.empty()) throw std::runtime_error("Final Global Path is empty.");
         
-        // Debug Visuals
-        roadmap_viz::RoadmapVisualizer viz;
-        viz.render(map, *roadmap);
-        viz.drawPath(*roadmap, fullGlobalPath);
-        viz.saveToFile(OUTPUT_DIR + planner_type + "_path.png");
+        // Visualizzazione Debug
         GraphSearch::rviz_plan(fullGlobalPath, *roadmap, debug_pub);
 
         // --- PHASE 3: EXECUTION ---
@@ -327,7 +342,6 @@ int main(int argc, char **argv) {
 
             bool isCritical = (criticalNodes.find(nextIdx) != criticalNodes.end());
             
-            // Calcolo orientamento target
             double goal_theta = 0.0;
             double approach_angle = std::atan2(targetV.y - currentV.y, targetV.x - currentV.x);
 
@@ -344,7 +358,6 @@ int main(int argc, char **argv) {
                 goal_theta = approach_angle;
             }
 
-            // Check se siamo già arrivati (Safety per nodi critici)
             bool already_at_target = false;
             if (isCritical) {
                 double dist_to_target = 0.0;
@@ -358,18 +371,15 @@ int main(int argc, char **argv) {
                 }
             }
 
-            // Loop di movimento (con Retries)
             int retry_count = 0;
             int current_max_retries = isCritical ? MAX_DUBINS_RETRIES : 1;
             bool node_success = already_at_target;
 
             while (!node_success && retry_count <= current_max_retries) {
-                // Riduce velocità nei retry
                 double v_cmd = (retry_count == 0) ? ROBOT_VELOCITY : (ROBOT_VELOCITY * 0.6); 
                 
                 dubins_client.sendGoal(targetV.x, targetV.y, goal_theta, v_cmd, TURNING_RADIUS);
                 
-                // Monitoraggio stallo
                 ros::Rate loop_rate(5); 
                 ros::Time stall_start_time = ros::Time::now();
                 ros::Time segment_start_time = ros::Time::now(); 
@@ -380,15 +390,14 @@ int main(int argc, char **argv) {
                         break;
                     }
 
-                    // Anti-Stall Logic
                     double v_now = 0.0;
                     { std::lock_guard<std::mutex> lock(odom_mutex); v_now = current_speed; }
 
-                    if (ros::Time::now() - segment_start_time > ros::Duration(2.0)) { // Grace period iniziale
+                    if (ros::Time::now() - segment_start_time > ros::Duration(2.0)) { 
                         if (v_now > 0.02) stall_start_time = ros::Time::now();
                         else if (ros::Time::now() - stall_start_time > ros::Duration(3.0)) {
                             ROS_WARN("STALL DETECTED moving to node %d", nextIdx);
-                            break; // Esce dal wait loop, triggera retry o fail
+                            break; 
                         }
                     }
                     loop_rate.sleep();
@@ -405,7 +414,6 @@ int main(int argc, char **argv) {
                 }
             }
 
-            // Esito nodo
             if (!node_success) {
                 if (isCritical) {
                     ROS_ERROR("CRITICAL FAILURE at Node %d. Mission Aborted.", nextIdx);
@@ -415,8 +423,22 @@ int main(int argc, char **argv) {
                     ROS_WARN("Failed non-critical node %d. Skipping...", nextIdx);
                 }
             } else if (isCritical && !already_at_target) {
-                metrics.victims_collected++; // Nota: incrementa anche per il Gate, aggiustare se necessario logica task
-                ROS_INFO("CRITICAL TARGET REACHED (Node %d). Victims: %d", nextIdx, metrics.victims_collected);
+                // SE è una vittima (non il Gate)
+                if (i != fullGlobalPath.size() - 2) {
+                    metrics.victims_collected++;
+                    
+                    // AGGIORNA PUNTEGGIO
+                    if (victim_score_map.count(nextIdx)) {
+                        double score_val = victim_score_map[nextIdx];
+                        metrics.total_score += score_val;
+                        ROS_INFO("VICTIM RESCUED! Value: %.1f | Total Score: %.1f", score_val, metrics.total_score);
+                    } else {
+                        ROS_WARN("Victim collected but score not found in map!");
+                    }
+                } else {
+                    ROS_INFO("GATE REACHED!");
+                }
+                
                 dubins_client.sendGoal(targetV.x, targetV.y, goal_theta, 0.0, TURNING_RADIUS);
                 ros::Duration(1.0).sleep();
             }
@@ -425,12 +447,11 @@ int main(int argc, char **argv) {
         metrics.t_execution = (ros::Time::now() - t_start_exec).toSec();
         metrics.success = !mission_failed;
 
-        // Logging finale
         ROS_INFO("\n=== MISSION REPORT ===");
-        ROS_INFO("Planner: %s", metrics.planner.c_str());
-        ROS_INFO("Success: %s", metrics.success ? "YES" : "NO");
-        ROS_INFO("Time Plan: %.3fs | Time Exec: %.3fs", metrics.t_total_planning, metrics.t_execution);
-        ROS_INFO("Victims/Gate Points: %d | Retries: %d", metrics.victims_collected, metrics.dubins_retries);
+        ROS_INFO("Planner: %s | Limit: %.1f s", metrics.planner.c_str(), metrics.time_limit_set);
+        ROS_INFO("Total Score: %.1f", metrics.total_score);
+        ROS_INFO("Time Exec: %.3fs", metrics.t_execution);
+        ROS_INFO("Victims: %d | Success: %s", metrics.victims_collected, metrics.success ? "YES" : "NO");
 
         appendMetricsToFile(OUTPUT_DIR + METRICS_FILENAME, metrics);
 
