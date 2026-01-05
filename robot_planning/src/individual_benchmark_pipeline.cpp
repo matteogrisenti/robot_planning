@@ -12,6 +12,7 @@
 #include <algorithm> 
 #include <mutex>
 #include <chrono>
+#include <sstream> // Aggiunto per stringstream
 
 #include "map_library.h"
 #include "roadmap.h"
@@ -19,6 +20,7 @@
 #include "astar.h" 
 #include "dubins_planner_client.h"
 #include "planning_utils.h" 
+#include "libraries/roadmap/roadmap_visualization.h" // NUOVO: Header per salvataggio immagini
 
 // =============================================================================
 // 1. CONFIGURAZIONE HYPERPARAMETERS
@@ -41,10 +43,10 @@ bool odom_active = false;
 struct RunMetrics {
     std::string planner;
     double time_limit_set;
-    double total_score;     // NUOVO: Punteggio accumulato (somma raggi vittime)
+    double total_score;     
     double t_roadmap;
     double t_total_planning;
-    double t_execution;     // Tempo totale di esecuzione
+    double t_execution;     
     int victims_collected;
     int dubins_retries;
     bool success;
@@ -67,8 +69,8 @@ void appendMetricsToFile(const std::string& filepath, const RunMetrics& m) {
         
         file << m.planner << "\t" 
              << m.time_limit_set << "\t"
-             << m.total_score << "\t"       // Score
-             << m.t_execution << "\t"       // Tempo Totale
+             << m.total_score << "\t"       
+             << m.t_execution << "\t"       
              << m.t_total_planning << "\t"
              << m.victims_collected << "\t"
              << m.dubins_retries << "\t"
@@ -326,8 +328,36 @@ int main(int argc, char **argv) {
 
         if (fullGlobalPath.empty()) throw std::runtime_error("Final Global Path is empty.");
         
-        // Visualizzazione Debug
+        // Visualizzazione Debug Rviz
         GraphSearch::rviz_plan(fullGlobalPath, *roadmap, debug_pub);
+
+        // =========================================================
+        // NUOVO: SALVATAGGIO IMMAGINE SU DISCO
+        // =========================================================
+        try {
+            roadmap_viz::RoadmapVisualizer viz;
+            // 1. Renderizza mappa statica e roadmap
+            viz.render(map, *roadmap);
+            // 2. Disegna il percorso calcolato
+            viz.drawPath(*roadmap, fullGlobalPath);
+            
+            // 3. Costruisci il nome file univoco
+            std::stringstream ss;
+            // Usa OUTPUT_DIR definita sopra come src/robot_planning/robot_planning/src/test/
+            ss << OUTPUT_DIR << planner_type << "_limit_" << (int)time_limit << ".png";
+            std::string img_path = ss.str();
+
+            // 4. Salva
+            if (viz.saveToFile(img_path)) {
+                ROS_INFO("SNAPSHOT SAVED: %s", img_path.c_str());
+            } else {
+                ROS_ERROR("SNAPSHOT FAILED: Could not save to %s", img_path.c_str());
+            }
+        } catch (const std::exception& e) {
+            ROS_WARN("Visualization error: %s", e.what());
+        }
+        // =========================================================
+
 
         // --- PHASE 3: EXECUTION ---
         ROS_INFO("Starting Execution...");

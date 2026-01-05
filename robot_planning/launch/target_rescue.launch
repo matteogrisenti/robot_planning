@@ -6,7 +6,7 @@
     <arg name="use_rviz" default="true" />
 
     <arg name="victims_activated" default="true" />
-    <arg name="generate_new_config" default="true" />
+    <arg name="generate_new_config" default="false" />
     <arg name="debug" default="false" />
 
     <!-- Parameters -->
