@@ -8,16 +8,8 @@
 #include "map_library/map_builder.h"
 #include "robot_control/Reference.h"
 
-// --- LEGACY GLOBAL VARIABLES ---
-bool DEBUG = false;
-long double X0, Y0, Th0, Xf, Yf, Thf, Kmax;
-int pidx;
-int no_waypts, step, no_of_samples;
-long double angle_step;
-dubinscurve_out dubin_curve;
-point init_pt, final_pt;
-std::vector<point> best_path;
-// --------------------------------------------------------------------------------
+// REMOVED: Legacy global variables (dubinscurve_out, point, etc.)
+// These are now handled internally by the DubinsPlanner class.
 
 class ControlTestNode {
 private:
@@ -26,7 +18,6 @@ private:
     ros::Subscriber sub_ref_;
 
     std::string robot_name_;
-
     DubinsPlanner planner_;
 
     bool odom_received_ = false;
@@ -37,8 +28,9 @@ private:
     double robot_y_ = 0.0;     
     double robot_theta_ = 0.0; 
 
+    // Used members from map_library
     Point goal_pos_;
-    double goal_theta_;
+    double goal_theta_ = 0.0;
     double target_speed_ = 0.5; 
     double min_turning_radius_ = 0.5; 
 
@@ -51,7 +43,9 @@ private:
 
 public:
     ControlTestNode(const std::string& robot_name)
-        : robot_name_(robot_name), planner_(nh_, robot_name_, 0.25, 0.05) 
+        : nh_("~"),
+          robot_name_(robot_name), 
+          planner_(nh_, robot_name_, 0.25, 0.05) 
     {
         sub_odom_ = nh_.subscribe("/" + robot_name_ + "/odom", 1, &ControlTestNode::odomCallback, this);
         sub_ref_ = nh_.subscribe("/" + robot_name_ + "/ref", 1, &ControlTestNode::refCallback, this);
@@ -79,7 +73,7 @@ public:
                      goal_pos_.x, goal_pos_.y, goal_theta_);
         } else {
             ROS_WARN("[ControlTestNode] No gates found! Defaulting to (2.0, 0.0)");
-            goal_pos_ = {2.0, 0.0, 0.0};
+            goal_pos_.x = 2.0; goal_pos_.y = 0.0;
             goal_theta_ = 0.0;
         }
     }
@@ -151,25 +145,10 @@ public:
     }
 
     void reportAccuracy() {
-        if (sample_count_ == 0) {
-            ROS_WARN("[ControlTestNode] No samples collected for accuracy.");
-            return;
-        }
-
+        if (sample_count_ == 0) return;
         double rmse_pos = std::sqrt(sum_sq_error_pos_ / sample_count_);
         double rmse_th  = std::sqrt(sum_sq_error_theta_ / sample_count_);
-
-        ROS_INFO("========================================");
-        ROS_INFO("       TRAJECTORY TRACKING ACCURACY     ");
-        ROS_INFO("========================================");
-        ROS_INFO(" Samples collected: %ld", sample_count_);
-        ROS_INFO(" Position RMSE:     %.4f meters", rmse_pos);
-        ROS_INFO(" Heading RMSE:      %.4f radians", rmse_th);
-        ROS_INFO("========================================");
-
-        sample_count_ = 0;
-        sum_sq_error_pos_ = 0.0;
-        sum_sq_error_theta_ = 0.0;
+        ROS_INFO(" RMSE Pos: %.4f m, RMSE Theta: %.4f rad", rmse_pos, rmse_th);
     }
 
     void update() {
@@ -181,11 +160,9 @@ public:
 
 int main(int argc, char** argv) {
     ros::init(argc, argv, "controller_test_node");
-    ros::NodeHandle nh_("~");
-
-    std::string robot_name = nh_.param<std::string>("robot_name", "limo0");
+    ros::NodeHandle nh("~");
+    std::string robot_name = nh.param<std::string>("robot_name", "limo0");
     ControlTestNode node(robot_name);
-
     ros::Rate r(50); 
     while (ros::ok()) {
         ros::spinOnce();

@@ -72,27 +72,27 @@ private:
     ros::NodeHandle nh_;  
     ros::Publisher pub_ref_; // For reference commands
     ros::Publisher pub_viz_; // For debug markers
-
-    // Logic Objects
-    CollisionChecker collision_checker_;
-    dubinscurve_out current_curve_;
-    int current_segment_index_;
-    double total_arc_distance_;
-    int current_best_idx_; // Needed for collision check verification
-
-    // Execution State
-    bool map_received_;
-    bool plan_valid_;
-    bool is_executing_;
     
-    ros::Time start_time_;
-    double target_velocity_;
+    // Logic Objects
+    Kinematics::DubinsSolver solver_;       // Persistent solver instance
+    Kinematics::Trajectory current_path_;   // Updated trajectory storage
+    CollisionChecker collision_checker_;    // Collision checker instance
+
+    // Execution Flags
+    bool map_received_;         // True if map has been set
+    bool plan_valid_;           // True if the last plan is valid
+    bool is_executing_;         // True if currently executing a plan
+    // Execution Variables
+    int current_segment_index_;     // Segment execution index
+    double total_seg_distance_;     // Total length of the current path
+    ros::Time start_time_;          // Start time of execution
+    double target_velocity_;        // Target linear velocity
 
     // Helpers
     // Publishes the instantaneous reference point along the given arc at distance s_local
-    void publishReference(const dubinsarc_out& arc, double s_local);
+    void publishReference(const Kinematics::Segment& seg, double s_local);
     // Publishes debug visualization of the planned path
-    void publishDebugViz(const dubinscurve_out& curve, bool valid);
+    void publishDebugViz(const Kinematics::Trajectory& curve, bool valid);
 };
 
 #endif // DUBINS_PLANNER_H

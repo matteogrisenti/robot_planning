@@ -10,7 +10,6 @@
 #include "dubins_planner/dubins_trajectory.h"
 
 // --- Strutture Dati di Base ---
-
 struct Point2D {
     double x;
     double y;
@@ -23,8 +22,6 @@ struct CircleObstacle {
 };
 
 // Ostacolo Poligonale
-// IMPORTANTE: Si assume che centroid e bounding_radius siano PRE-CALCOLATI
-// dal produttore dei dati (es. nel nodo che riceve la mappa).
 struct PolygonObstacle {
     std::vector<Point2D> vertices; // Vertici ordinati (es. senso antiorario)
     Point2D centroid;              // Centro per la Broad Phase
@@ -46,9 +43,7 @@ public:
     /**
      * @brief Funzione principale di verifica collisioni.
      * Verifica la posa del robot contro un'istantanea degli ostacoli correnti.
-     * * @param robot_pose Posizione centrale del robot (x,y).
-     * @param circles Lista degli ostacoli circolari correnti.
-     * @param polygons Lista degli ostacoli poligonali correnti (con dati broad phase precalcolati).
+     * @param robot_pose Posizione centrale del robot (x,y).
      * @return true se in collisione, false altrimenti.
      */
     [[nodiscard]] bool check(const Point2D& robot_pose) const;
@@ -64,15 +59,12 @@ public:
      */
     bool is_state_valid(double x, double y) const;
 
-    // Insted to pass al the parameter to recompute the curve, we pass directly the curve with reference
     /**
-     * @brief Controlla se è possibile connettere A a B con una curva di Dubins valida.
-     * @param start Configurazione di partenza {x, y, theta}
-     * @param end Configurazione di arrivo {x, y, theta}
-     * @param rho Raggio minimo di curvatura (es. 0.5m)
-     * @return true se il percorso esiste ed è libero da collisioni.
+     * @brief Checks if a planned Dubins trajectory is free of collisions.
+     * @param trajectory The planned path from the DubinsSolver.
+     * @return true if the path is clear, false if any point collides.
      */
-    bool is_dubins_path_valid(const int best_word, const dubinscurve_out& curve) const;
+    bool is_dubins_path_valid(const Kinematics::Trajectory& trajectory) const;
 
     
 private:

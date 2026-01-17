@@ -1,162 +1,100 @@
 #include <ros/ros.h>
-#include <robot_control/Reference.h> // To verify the output messages
+#include <robot_control/Reference.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <tf/tf.h>
 #include <nav_msgs/Odometry.h>
-
-
-// Include the Planner Class we want to test
 #include "dubins_planner/dubins_planner.h"
 #include "map_library/map_builder.h"
-
-// --- LEGACY GLOBAL VARIABLES (Required for linking dubins_trajectory library) ---
-bool DEBUG = false;
-long double X0, Y0, Th0, Xf, Yf, Thf, Kmax;
-int pidx;
-int no_waypts, step, no_of_samples;
-long double angle_step;
-dubinscurve_out dubin_curve;
-point init_pt, final_pt;
-std::vector<point> best_path;
-// --------------------------------------------------------------------------------
 
 class DubinsPlannerTester {
 private:
     ros::NodeHandle nh_;
-    
-    // The Object Under Test (OUT)
     DubinsPlanner planner_; 
     
-    // Verification Subscriber (listens to the output of the planner)
-    ros::Subscriber ref_verification_sub_;
-
-    // Odometry Subcriber (to simulate robot movement)
     ros::Subscriber odom_sub_;
-    double current_x_, current_y_, current_theta_;
+    double current_x_ = 0.0, current_y_ = 0.0, current_theta_ = 0.0;
     
-    Point goal_pos;
-    double goal_theta = 0.0;
+    // Member variables to store goal
+    Point goal_pos_;
+    double goal_theta_ = 0.0;
     bool test_running_ = false;
 
 public:
     DubinsPlannerTester() 
         : nh_("~"), 
-          // Initialize Planner with specific robot namespace
-          planner_(nh_, "limo0", 0.25, 0.05) 
-    {      
-        // 1. Setup Environment (Map & Goal)
-        setupEnvironment();
-
-        // 2. Setup Verification: Subscribe to the topic the planner SHOULD publish to
-        ref_verification_sub_ = nh_.subscribe("/limo0/ref", 1, 
-                                              &DubinsPlannerTester::verificationCallback, this);
-    
-        // 3. Setup Odometry Subscriber to simulate robot movement
-        odom_sub_ = nh_.subscribe("/limo0/odom", 1, 
-                                 &DubinsPlannerTester::odomCallback, this);
-        
-        // 5. Run the Test Sequence
-        runTestSequence();
+          planner_(nh_, "limo0", 0.15, 0.05) 
+    {
+        odom_sub_ = nh_.subscribe("/limo0/odom", 1, &DubinsPlannerTester::odomCallback, this);
     }
 
-    void setupEnvironment() {
-        ROS_INFO("[Tester] 1. Building Map...");
-        map_builder::MapBuilder builder(nh_, 1000.0);
-        Map map = builder.buildMap();
-        
-        // INJECT MAP into the planner
-        planner_.setMap(map);
-        
-        // Extract Goal from the first gate found
-        const auto& all_gates = map.gates.get_gates();
-        if (!all_gates.empty()) {
-            const Point& p = all_gates[0].get_position();
-            goal_pos = p;
-            
-            // Calc orientation from quaternion (assuming simple yaw)
+    void setupTest() {
+        // 1. Load Map
+        map_builder::MapBuilder builder(nh_, 10.0);
+        Map my_map = builder.buildMap();
+        planner_.setMap(my_map);
+
+        // 2. Determine Goal from Map or Defaults
+        const auto& all_gates = my_map.gates.get_gates();
+        const bool custom_goal = true;
+        if (!all_gates.empty() && !custom_goal) {
+            goal_pos_ = all_gates[0].get_position();
             const Orientation& o = all_gates[0].get_orientation();
-            goal_theta = std::atan2(2.0 * (o.w * o.z + o.x * o.y), 1.0 - 2.0 * (o.y * o.y + o.z * o.z));
-            
-            ROS_INFO("[Tester] Goal Set from Map: [%.2f, %.2f, %.2f]", goal_pos.x, goal_pos.y, goal_theta);
+            goal_theta_ = std::atan2(2.0 * (o.w * o.z + o.x * o.y), 1.0 - 2.0 * (o.y * o.y + o.z * o.z));
         } else {
-            ROS_WARN("[Tester] No gates found! Using default goal (2.0, 0.0, 0.0)");
-            goal_pos = {2.0, 0.0, 0.0};
-            goal_theta = 0.0;
+            goal_pos_.x = -5.0; goal_pos_.y = 2.0;
+            goal_theta_ = M_PI / 2.0;
         }
-    }
 
-    void runTestSequence() {
-        ROS_INFO("[Tester] 2. Testing PLANNER Logic...");
-        
-        // Define Start Pose (Test Scenario)
-        double start_x = 0.0;
-        double start_y = 0.0;
-        double start_th = 0.0;
-        double rho = 0.5; // Min turning radius
+        double min_turning_radius = 0.5;
 
-        // CALL PLANNER: This should trigger internal collision checks and Rviz visualization
-        bool success = planner_.planPath(start_x, start_y, start_th, 
-                                         goal_pos.x, goal_pos.y, goal_theta, 
-                                         rho, true); // Enable debug viz
-
-        if (success) {
-            ROS_INFO("[Tester] Plan Valid! (Check Rviz for Green Path)");
-            ROS_INFO("[Tester] 3. Testing EXECUTION Logic...");
-            
-            // Start Execution (Simulating the robot moving)
-            planner_.startExecution(0.5); // Target velocity 0.5 m/s
+        // 3. Plan using current position as start
+        ROS_INFO("[Tester] Planning from current pose to goal...");
+        if (planner_.planPath(current_x_, current_y_, current_theta_, 
+                              goal_pos_.x, goal_pos_.y, goal_theta_, 
+                              min_turning_radius, true)) {
+            ROS_INFO("[Tester] SUCCESS.");
+            planner_.startExecution(0.3);
             test_running_ = true;
         } else {
-            ROS_ERROR("[Tester] Plan Failed (Collision or Geometric). Check Rviz for Red Path.");
+            ROS_ERROR("[Tester] FAILED.");
         }
     }
 
-    // This callback mimics the controller receiving messages
-    void verificationCallback(const robot_control::Reference::ConstPtr& msg) {
-        if (msg->plan_finished) {
-            ROS_INFO("[Tester] VERIFIED: Received 'Plan Finished' signal.");
-            test_running_ = false;
-        } else {
-            // Log every ~1 second to confirm data flow
-            ROS_INFO_THROTTLE(1.0, "[Tester] VERIFIED: Topic '/limo0/ref' active. v=%.2f, w=%.2f, x=%.2f", 
-                              msg->v_d, msg->omega_d, msg->x_d);
-        }
-    }
-
-    // Odometry callback to read robot movement
     void odomCallback(const nav_msgs::Odometry::ConstPtr& msg) {
         current_x_ = msg->pose.pose.position.x;
         current_y_ = msg->pose.pose.position.y;
-        
-        tf::Quaternion q(
-            msg->pose.pose.orientation.x, 
-            msg->pose.pose.orientation.y, 
-            msg->pose.pose.orientation.z, 
-            msg->pose.pose.orientation.w);
-        tf::Matrix3x3 m(q);
-        double r, p, y;
-        m.getRPY(r, p, y);
-        current_theta_ = y;
+        tf::Quaternion q(msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, 
+                         msg->pose.pose.orientation.z, msg->pose.pose.orientation.w);
+        double r, p;
+        tf::Matrix3x3(q).getRPY(r, p, current_theta_);
     }
 
-    void spin() {
+    void update() {
         if (test_running_) {
-            // Drive the planner execution loop
-            planner_.spin(current_x_, current_y_, current_theta_);
+            bool finished = planner_.spin(current_x_, current_y_, current_theta_);
+            if (finished) {
+                ROS_INFO("[Tester] Goal Reached.");
+                test_running_ = false;
+            }
         }
     }
 };
 
 int main(int argc, char** argv) {
-    ros::init(argc, argv, "dubins_planner_tester");
-    
+    ros::init(argc, argv, "dubins_tester_node");
     DubinsPlannerTester tester;
     
-    ros::Rate r(50); // 50 Hz simulation loop
-    while(ros::ok()) {
-        tester.spin();
+    // Give ROS time to get initial odom before planning
+    ros::Duration(1.0).sleep();
+    ros::spinOnce();
+    
+    tester.setupTest();
+
+    ros::Rate loop_rate(20); 
+    while (ros::ok()) {
+        tester.update();
         ros::spinOnce();
-        r.sleep();
+        loop_rate.sleep();
     }
     return 0;
 }
