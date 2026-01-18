@@ -29,8 +29,8 @@ const double ROBOT_VELOCITY = 0.5;
 const double TURNING_RADIUS = 0.4;
 const int MAX_DUBINS_RETRIES = 3;           
 const double SAFETY_MARGIN = 0.90;          
-const std::string OUTPUT_DIR = "src/robot_planning/robot_planning/src/test/";
-const std::string METRICS_FILENAME = "benchmark_results.txt";
+const std::string OUTPUT_DIR = "src/robot_planning/src/test/";
+const std::string METRICS_FILENAME = "benchmark_results_2.txt";
 
 // =============================================================================
 // 2. GLOBALS & STRUCTS
@@ -97,139 +97,49 @@ double normalizeAngle(double angle) {
     return angle;
 }
 
-bool isSegmentSafe(const Vertex& p1, const Vertex& p2, const std::vector<Obstacle>& obstacles, double min_clearance) {
-    if (PlanningUtils::lineSegmentIntersectsObstacle(p1, p2, obstacles)) return false;
-    double dist = std::hypot(p2.x - p1.x, p2.y - p1.y);
-    double step_size = 0.05; 
-    int steps = std::max(2, (int)(dist / step_size)); 
-    for (int i = 0; i <= steps; ++i) {
-        double t = (double)i / steps;
-        Vertex p(p1.x + t*(p2.x - p1.x), p1.y + t*(p2.y - p1.y));
-        if (PlanningUtils::distanceToNearestObstacle(p, obstacles) < min_clearance) {
-            return false; 
-        }
-    }
-    return true;
-}
 
-void integratePosition(std::shared_ptr<Roadmap>& roadmap, const Vertex& pos, const std::vector<Obstacle>& obstacles, const std::string& label) {
-    for(int i=0; i<roadmap->getNumVertices(); ++i) {
-        if(roadmap->getVertex(i).distance(pos) < 0.05) return; 
-    }
 
-    int newIdx = roadmap->addVertex(pos);
-    double search_radius = 15.0; 
-    std::vector<std::pair<double, int>> neighbors;
-    
-    for(int i=0; i<roadmap->getNumVertices(); ++i) {
-        if(i == newIdx) continue;
-        double d = roadmap->getVertex(i).distance(pos);
-        if(d < search_radius) neighbors.push_back({d, i});
-    }
-    std::sort(neighbors.begin(), neighbors.end());
-
-    std::vector<double> margins = {SAFETY_MARGIN, 0.60, 0.30}; 
-    int connected_count = 0;
-    int min_connections = 3; 
-
-    for (double margin : margins) {
-        if (connected_count >= min_connections) break;
-        for(const auto& pair : neighbors) {
-            if (connected_count >= 15) break; 
-            int targetIdx = pair.second;
-            
-            bool edgeExists = false;
-            for(const auto& e : roadmap->getEdges(newIdx)) if(e.targetVertex == targetIdx) edgeExists = true;
-            if(edgeExists) continue;
-
-            bool possible = false;
-            if (margin > 0.0) possible = isSegmentSafe(pos, roadmap->getVertex(targetIdx), obstacles, margin);
-            else possible = !PlanningUtils::lineSegmentIntersectsObstacle(pos, roadmap->getVertex(targetIdx), obstacles);
-
-            if(possible) {
-                roadmap->addEdge(newIdx, targetIdx, pair.first);
-                roadmap->addEdge(targetIdx, newIdx, pair.first); 
-                connected_count++;
-            }
-        }
-    }
-    if(connected_count > 0) ROS_INFO("Integrated %s at (%.2f, %.2f) -> %d edges.", label.c_str(), pos.x, pos.y, connected_count);
-    else ROS_ERROR("CRITICAL: FAILED to integrate %s!", label.c_str());
-}
-
-std::vector<int> optimizePath(const std::vector<int>& rawPath, const Roadmap& roadmap, const std::vector<Obstacle>& obstacles) {
-    if (rawPath.size() < 2) return rawPath;
-    std::vector<int> optimized;
-    optimized.push_back(rawPath[0]);
-    int currentIdx = 0;
-    double min_node_dist = 1.0; 
-
-    while (currentIdx < rawPath.size() - 1) {
-        bool shortcutFound = false;
-        for (int i = rawPath.size() - 1; i > currentIdx + 1; --i) {
-            const Vertex& vStart = roadmap.getVertex(rawPath[currentIdx]);
-            const Vertex& vEnd = roadmap.getVertex(rawPath[i]);
-            if (isSegmentSafe(vStart, vEnd, obstacles, SAFETY_MARGIN)) {
-                optimized.push_back(rawPath[i]);
-                currentIdx = i;
-                shortcutFound = true;
-                break;
-            }
-        }
-        if (!shortcutFound) {
-            optimized.push_back(rawPath[currentIdx + 1]);
-            currentIdx++;
-        }
-    }
-    
-    if (optimized.size() > 2) {
-        std::vector<int> filtered;
-        filtered.push_back(optimized[0]);
-        for (size_t i = 1; i < optimized.size() - 1; ++i) {
-            const Vertex& prev = roadmap.getVertex(filtered.back());
-            const Vertex& curr = roadmap.getVertex(optimized[i]);
-            if (std::hypot(curr.x - prev.x, curr.y - prev.y) > min_node_dist) {
-                filtered.push_back(optimized[i]);
-            }
-        }
-        filtered.push_back(optimized.back());
-        return filtered;
-    }
-    return optimized;
-}
 
 // =============================================================================
 // 4. MAIN
 // =============================================================================
 int main(int argc, char **argv) {
+    ROS_WARN("=== BENCHMARK STARTED ===");
+
+    // Standard ROS initialization with an AsyncSpinner to handle 
+    // concurrent Odometry callbacks while the main thread is planning.
     ros::init(argc, argv, "individual_benchmark_node");
     ros::NodeHandle nh("~");
     ros::AsyncSpinner spinner(2); 
     spinner.start();
 
-    // Setup Odom
+
+    // --- ROS TOPIC SETUP ---
+    // Subscribes to odometry to track real-time robot position and speed.
     ros::Subscriber odom_sub = nh.subscribe("/odom", 1, odomCallback);
     if (odom_sub.getNumPublishers() == 0) {
         odom_sub = nh.subscribe("/limo0/odom", 1, odomCallback);
     }
 
-    // --- PARAMETRI ROS ---
-    // Esempio uso: rosrun robot_planning individual_benchmark_node _planner_type:=rrt _time_limit:=60.0
-    
-    std::string planner_type;
-    nh.param<std::string>("planner_type", planner_type, "acd");
-    
-    double time_limit;
-    nh.param<double>("time_limit", time_limit, 120.0); 
-    
+    // Publisher for debug visualization of the planned paths
     ros::Publisher debug_pub = nh.advertise<visualization_msgs::Marker>("/debug_path", 10); 
     DubinsClient dubins_client("/dubins_planner_server/follow_dubins_path");
 
-    ROS_WARN("=== BENCHMARK STARTED ===");
+
+    // --- DYNAMIC PARAMETER FETCHING ---
+    // Allows changing planners (e.g., RRT, PRM) and time limits via command line.
+    std::string planner_type;
+    nh.param<std::string>("planner_type", planner_type, "acd");
+    
+    // Total time limit for the planning + execution phase
+    double time_limit;
+    nh.param<double>("time_limit", time_limit, 120.0); 
+    
     ROS_INFO(">>> SELECTED PLANNER: %s", planner_type.c_str());
     ROS_INFO(">>> TIME LIMIT: %.1f s", time_limit);
 
-    // Attesa Odometria
+    // --- ODOMETRY LOCK ---
+    // Ensure we have a valid robot position before starting any planning.
     ROS_INFO("Waiting for Odometry...");
     while(ros::ok() && !odom_active) ros::Duration(0.1).sleep();
     
@@ -240,6 +150,7 @@ int main(int argc, char **argv) {
     }
     ROS_INFO("Start Pose Locked: (%.2f, %.2f)", startPose.x, startPose.y);
 
+    // Initialize metrics structure for final benchmark logging.
     RunMetrics metrics;
     metrics.planner = planner_type; 
     metrics.time_limit_set = time_limit;
@@ -249,34 +160,35 @@ int main(int argc, char **argv) {
     metrics.success = false;
 
     try {
-        // --- BUILD MAP ---
+        // --- PHASE 1: ENVIRONMENT MODELING & ROADMAP ---
+        // 1.1 Build the physical map (obstacles, victims, gates).
         map_builder::MapBuilder builder(nh, 1000.0);
         ROS_INFO("Building Map...");
         Map map = builder.buildMap();
 
-        // --- PHASE 1: ROADMAP GENERATION ---
+        // 1.2 Generate the connectivity graph using the selected algorithm.
         ros::Time t_start_roadmap = ros::Time::now();
         std::shared_ptr<Roadmap> roadmap = generateRoadmap(planner_type, map);
         if (!roadmap) throw std::runtime_error("Roadmap generation failed.");
         
-        // Integrazione Entità
-        integratePosition(roadmap, startPose, map.obstacles.get_obstacles(), "Start");
+        // 1.3 Integration: Connect Start, Gate and Victims coordinates into the discrete roadmap graph.
+        PlanningUtils::integratePosition(roadmap, startPose, map.obstacles.get_obstacles(), "Start");
         
         Vertex gatePose(0,0);
         if (!map.gates.get_gates().empty()) {
             Point g = map.gates.get_gates()[0].get_position();
             gatePose = Vertex(g.x, g.y);
-            integratePosition(roadmap, gatePose, map.obstacles.get_obstacles(), "Gate");
+            PlanningUtils::integratePosition(roadmap, gatePose, map.obstacles.get_obstacles(), "Gate");
         }
 
+        // Map every victim into the graph to allow A* pathfinding between them.
         std::vector<Victim> victims = map.victims.get_victims();
         for(size_t i=0; i<victims.size(); ++i) {
             Point v = victims[i].get_center();
-            integratePosition(roadmap, Vertex(v.x, v.y), map.obstacles.get_obstacles(), "Victim " + std::to_string(i));
+            PlanningUtils::integratePosition(roadmap, Vertex(v.x, v.y), map.obstacles.get_obstacles(), "Victim " + std::to_string(i));
         }
 
-        // --- MAPPA VITTIME PER CALCOLO PUNTEGGIO ---
-        // Associa il nodo del grafo al valore (raggio) della vittima
+        // Create a lookup map to quickly reward the robot when a node is reached.
         std::map<int, double> victim_score_map;
         for(const auto& v : victims) {
             int idx = GraphSearch::TaskPlanner::getNearestNodeIdx(*roadmap, Vertex(v.get_center().x, v.get_center().y));
@@ -287,19 +199,27 @@ int main(int argc, char **argv) {
         
         metrics.t_roadmap = (ros::Time::now() - t_start_roadmap).toSec();
 
-        // --- PHASE 2: PLANNING CON BUDGET ---
+
+
+        // --- PHASE 2: MISSION STRATEGY (TASK PLANNING) ---
         ros::Time t_start_plan = ros::Time::now();
         
         ROS_INFO("Planning Mission Sequence (Time Budget: %.1f s)...", time_limit);
         
+        // Use a conservative velocity (85% of max) to account for time lost during turns.
         double conservative_velocity = ROBOT_VELOCITY * 0.85;
         
+        // Sequence victims using a Greedy approach based on Value/Cost ratio.
         std::vector<int> missionSequence = GraphSearch::TaskPlanner::planMissionSequence(
             *roadmap, startPose, victims, gatePose, time_limit, conservative_velocity
         );
         
         if (missionSequence.empty()) throw std::runtime_error("Task Planning failed (Sequence empty).");
 
+
+
+        // --- PHASE 3: GRAPH PLANNING ---
+        // Expand the "Mission Sequence" (e.g., Start->Victim1->Gate) into a "Full Path" (node-by-node).
         std::set<int> criticalNodes(missionSequence.begin(), missionSequence.end());
         std::vector<int> fullGlobalPath;
 
@@ -311,14 +231,10 @@ int main(int argc, char **argv) {
                 continue; 
             }
 
+            // Shortcut the path to remove unnecessary zig-zags unless approaching a target.
             bool isCriticalApproach = (i == missionSequence.size() - 2);
-            std::vector<int> segmentToAdd;
-            
-            if (isCriticalApproach) {
-                segmentToAdd = rawSegment;
-            } else {
-                segmentToAdd = optimizePath(rawSegment, *roadmap, map.obstacles.get_obstacles());
-            }
+            std::vector<int> segmentToAdd = isCriticalApproach ? rawSegment : 
+                                                        PlanningUtils::optimizePath(rawSegment, *roadmap, map.obstacles.get_obstacles());
 
             if (fullGlobalPath.empty()) fullGlobalPath = segmentToAdd;
             else fullGlobalPath.insert(fullGlobalPath.end(), segmentToAdd.begin() + 1, segmentToAdd.end());
@@ -331,23 +247,14 @@ int main(int argc, char **argv) {
         // Visualizzazione Debug Rviz
         GraphSearch::rviz_plan(fullGlobalPath, *roadmap, debug_pub);
 
-        // =========================================================
-        // NUOVO: SALVATAGGIO IMMAGINE SU DISCO
-        // =========================================================
+        // Save a visual PNG snapshot of the final plan for the benchmark report.
         try {
             roadmap_viz::RoadmapVisualizer viz;
-            // 1. Renderizza mappa statica e roadmap
             viz.render(map, *roadmap);
-            // 2. Disegna il percorso calcolato
             viz.drawPath(*roadmap, fullGlobalPath);
-            
-            // 3. Costruisci il nome file univoco
             std::stringstream ss;
-            // Usa OUTPUT_DIR definita sopra come src/robot_planning/robot_planning/src/test/
             ss << OUTPUT_DIR << planner_type << "_limit_" << (int)time_limit << ".png";
             std::string img_path = ss.str();
-
-            // 4. Salva
             if (viz.saveToFile(img_path)) {
                 ROS_INFO("SNAPSHOT SAVED: %s", img_path.c_str());
             } else {
@@ -356,10 +263,10 @@ int main(int argc, char **argv) {
         } catch (const std::exception& e) {
             ROS_WARN("Visualization error: %s", e.what());
         }
-        // =========================================================
 
 
-        // --- PHASE 3: EXECUTION ---
+
+        // --- PHASE 4: REAL-TIME EXECUTION ---
         ROS_INFO("Starting Execution...");
         ros::Time t_start_exec = ros::Time::now();
         bool mission_failed = false;
@@ -370,24 +277,23 @@ int main(int argc, char **argv) {
             const Vertex& currentV = roadmap->getVertex(currentIdx);
             const Vertex& targetV = roadmap->getVertex(nextIdx);
 
+            // Determine if the next node requires a specific heading (theta)
             bool isCritical = (criticalNodes.find(nextIdx) != criticalNodes.end());
-            
             double goal_theta = 0.0;
             double approach_angle = std::atan2(targetV.y - currentV.y, targetV.x - currentV.x);
 
-            if (isCritical) {
-                goal_theta = approach_angle;
-            } 
-            else if (i + 2 < fullGlobalPath.size()) {
+            // Smooth heading: if next turn is shallow, point toward the exit of the node instead.
+            if (!isCritical && i + 2 < fullGlobalPath.size()) {
                 const Vertex& futureV = roadmap->getVertex(fullGlobalPath[i+2]);
                 double exit_angle = std::atan2(futureV.y - targetV.y, futureV.x - targetV.x);
-                double turn_angle = std::abs(normalizeAngle(exit_angle - approach_angle));
-                if (turn_angle > (60.0 * M_PI / 180.0)) goal_theta = approach_angle; 
-                else goal_theta = exit_angle; 
+                if (std::abs(normalizeAngle(exit_angle - approach_angle)) <= (M_PI/3.0)) 
+                    goal_theta = exit_angle;
             } else {
                 goal_theta = approach_angle;
             }
 
+
+            // --- NAVIGATION LOOP WITH STALL DETECTION ---
             bool already_at_target = false;
             if (isCritical) {
                 double dist_to_target = 0.0;
