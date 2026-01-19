@@ -2,7 +2,7 @@
 #include <memory>
 
 #include "map_library/map_builder.h"
-#include "combinatorial_planning.h"
+#include "libraries/combinatorial_planning.h"
 
 /**
  * @brief Test node for experimenting with different roadmap algorithms

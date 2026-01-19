@@ -16,8 +16,8 @@ find_package(catkin REQUIRED COMPONENTS
   visualization_msgs
   nav_msgs
   # Custom Packages
-  dubins_planner
-  map_library
+  dubins_planner    # used to access DubinsClient
+  map_library       # used to access MapBuilder
 )
 
 find_package(Boost REQUIRED)
@@ -117,6 +117,21 @@ target_link_libraries(graph_search_lib
   ${catkin_LIBRARIES}
 )
 
+# -- Mission Manager Library ---
+add_library(mission_manager_lib
+  src/mission_manager.cpp
+)
+target_link_libraries(mission_manager_lib
+  planning_utils_lib         # Per PlanningUtils
+  roadmap_lib                # Per Roadmap
+  roadmap_factory_lib        # Per generateRoadmap
+  graph_search_lib           # Per AStar e TaskPlanner
+  map_library                # Per MapBuilder
+  dubins_client_library      # Per DubinsClient
+  sample_planning_lib        # Necessarie se incluse indirettamente
+  combinatorial_planning_lib # Necessarie se incluse indirettamente
+)
+
 # ==============================================================================
 # 4. Executables
 # ==============================================================================
@@ -179,17 +194,10 @@ add_dependencies(graph_search_test_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${ca
 # add_dependencies(complete_planning_pipeline_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 
-add_executable(individual_benchmark_node src/individual_benchmark_pipeline.cpp)
+add_executable(individual_benchmark_node src/individual_benchmark.cpp)
 target_link_libraries(individual_benchmark_node
   ${catkin_LIBRARIES}
-  planning_utils_lib         # Per PlanningUtils
-  roadmap_lib                # Per Roadmap
-  roadmap_factory_lib        # Per generateRoadmap
-  graph_search_lib           # Per AStar e TaskPlanner
-  map_library                # Per MapBuilder
-  dubins_client_library      # Per DubinsClient
-  sample_planning_lib        # Necessarie se incluse indirettamente
-  combinatorial_planning_lib # Necessarie se incluse indirettamente
+  mission_manager_lib        
 )
 
 

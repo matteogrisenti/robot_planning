@@ -3,7 +3,7 @@
 
 #include <memory>
 #include <map_library/map_data_structures.h>
-#include <roadmap.h>
+#include <libraries/roadmap.h>
 
 namespace sample_planning {
 

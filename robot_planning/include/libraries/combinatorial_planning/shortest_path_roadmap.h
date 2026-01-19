@@ -3,7 +3,7 @@
 
 #include <memory>
 #include "map_library/map_data_structures.h"
-#include "roadmap.h"
+#include "libraries/roadmap.h"
 
 /**
  * @brief Generates a Shortest Path Roadmap (Reduced Visibility Graph).

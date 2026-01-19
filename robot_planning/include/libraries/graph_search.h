@@ -7,7 +7,7 @@
 #include <queue>
 #include <limits>
 #include <ros/ros.h> 
-#include "roadmap.h"
+#include "libraries/roadmap.h"
 #include "map_library.h"
 
 namespace GraphSearch {

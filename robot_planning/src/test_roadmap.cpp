@@ -5,13 +5,12 @@
 
 // Infrastruttura Mappa e Roadmap
 #include "map_library.h"
-#include "roadmap.h"
+#include "libraries/roadmap.h"
 
 // Algoritmi Combinatoriali
-#include "combinatorial_planning.h"
-
+#include "libraries/combinatorial_planning.h"
 // Algoritmi Sample-Based
-#include "sample_based_planning.h"
+#include "libraries/sample_based_planning.h"
 
 int main(int argc, char **argv)
 {

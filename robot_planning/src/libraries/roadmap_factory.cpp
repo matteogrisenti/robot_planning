@@ -1,6 +1,6 @@
-#include "roadmap_factory.h"
-#include "combinatorial_planning.h"
-#include "sample_based_planning.h"
+#include "libraries/roadmap_factory.h"
+#include "libraries/combinatorial_planning.h"
+#include "libraries/sample_based_planning.h"
 #include <ros/ros.h>
 
 std::shared_ptr<Roadmap> generateRoadmap(const std::string& type, const Map& map) {

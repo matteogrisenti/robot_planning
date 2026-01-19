@@ -7,12 +7,12 @@
 #include <iomanip>
 #include <iostream>
 
-#include "map_library/map_builder.h"
-#include "roadmap.h"
-#include "combinatorial_planning.h"
-#include "sample_based_planning.h"
-#include "graph_search.h" 
-#include "roadmap_factory.h"
+#include "map_library.h"
+#include "libraries/roadmap.h"
+#include "libraries/combinatorial_planning.h"
+#include "libraries/sample_based_planning.h"
+#include "libraries/graph_search.h" 
+#include "libraries/roadmap_factory.h"
 
 using namespace std;
 using namespace std::chrono;

@@ -1,5 +1,5 @@
 #include "libraries/combinatorial_planning/maximum_clearance_roadmap.h"
-#include "planning_utils.h" 
+#include "libraries/planning_utils.h" 
 
 #include <vector>
 #include <map>

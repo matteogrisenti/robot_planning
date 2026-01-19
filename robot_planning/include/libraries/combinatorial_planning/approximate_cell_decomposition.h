@@ -4,7 +4,7 @@
 #include <vector>
 #include <memory>
 #include <map_library/map_data_structures.h>
-#include <roadmap.h>
+#include <libraries/roadmap.h>
 
 
 /**  Main Function: Recursively subdivides space into grid cells

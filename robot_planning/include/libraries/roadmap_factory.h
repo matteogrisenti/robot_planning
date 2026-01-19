@@ -3,7 +3,7 @@
 
 #include <memory>
 #include <string>
-#include "roadmap.h"
+#include "libraries/roadmap.h"
 #include "map_library/map_data_structures.h" 
 
 // This function now lives here, breaking the cycle

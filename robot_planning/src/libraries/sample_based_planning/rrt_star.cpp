@@ -1,5 +1,5 @@
 #include "libraries/sample_based_planning/rrt_star.h"
-#include "planning_utils.h"
+#include "libraries/planning_utils.h"
 #include <random>
 #include <cmath>
 #include <limits>

@@ -3,7 +3,7 @@
 #include <cmath>
 #include <ros/ros.h>
 
-#include "planning_utils.h"
+#include "libraries/planning_utils.h"
 
 namespace PlanningUtils {
 

@@ -6,10 +6,10 @@
 
 // Include Map & Roadmap Infrastructure
 #include "map_library.h"
-#include "roadmap.h"
+#include "libraries/roadmap.h"
 
 // Include Sample-Based Algorithms
-#include "sample_based_planning.h"
+#include "libraries/sample_based_planning.h"
 
 int main(int argc, char **argv)
 {
