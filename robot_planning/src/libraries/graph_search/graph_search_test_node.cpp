@@ -92,7 +92,7 @@ int main(int argc, char **argv) {
             if (missionSequence.empty()) pathSuccess = false;
 
             for (size_t i = 0; i < missionSequence.size() - 1; ++i) {
-                vector<int> segment = GraphSearch::AStarPlanner::computePath(*roadmap, missionSequence[i], missionSequence[i+1]);
+                vector<int> segment = GraphSearch::AStar::computePath(*roadmap, missionSequence[i], missionSequence[i+1]);
                 if (segment.empty()) {
                     ROS_WARN("Segment %lu unreachable (%d -> %d)", i, missionSequence[i], missionSequence[i+1]);
                     pathSuccess = false; 

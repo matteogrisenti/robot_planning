@@ -1,15 +1,19 @@
 #include "libraries/graph_search.h"
+#include "libraries/planning_utils.h"
 #include <iostream>
 #include <ros/ros.h> // Per logging
 
 namespace GraphSearch {
 
-    double AStarPlanner::heuristic(const Vertex& a, const Vertex& b) {
+    // =========================================================================
+    // AStar Implementation
+    // =========================================================================
+    double AStar::heuristic(const Vertex& a, const Vertex& b) {
         // Standard distance formula: sqrt((x2-x1)^2 + (y2-y1)^2)
         return std::sqrt(std::pow(a.x - b.x, 2) + std::pow(a.y - b.y, 2));
     }
 
-    std::vector<int> AStarPlanner::computePath(const Roadmap& graph, int startNodeIdx, int goalNodeIdx) {
+    std::vector<int> AStar::computePath(const Roadmap& graph, int startNodeIdx, int goalNodeIdx) {
         // 1. EDGE CASE HANDLING
         if (startNodeIdx < 0 || goalNodeIdx < 0) return {};         // Invalid indices
         if (startNodeIdx == goalNodeIdx) return {startNodeIdx};     // Start is the goal
@@ -82,7 +86,9 @@ namespace GraphSearch {
 
 
 
-
+    // =========================================================================
+    // TaskPlanner Implementation
+    // =========================================================================
     int TaskPlanner::getNearestNodeIdx(const Roadmap& graph, const Vertex& pos) {
         int bestIdx = -1;
         double minDist = std::numeric_limits<double>::max();
@@ -103,7 +109,7 @@ namespace GraphSearch {
         if (startIdx == endIdx) return 0.0;
         
         // Run the A* algorithm to find the sequence of nodes
-        std::vector<int> path = AStarPlanner::computePath(graph, startIdx, endIdx);
+        std::vector<int> path = AStar::computePath(graph, startIdx, endIdx);
         
         if (path.empty()) return 1e9; // Infinito (irraggiungibile)
         
@@ -224,4 +230,58 @@ namespace GraphSearch {
 
         return sequence;
     }
+
+
+
+
+
+
+    // =========================================================================
+    // GraphPlanner Implementation
+    // =========================================================================
+    std::vector<int> GraphPlanner::computeFullTrajectory(
+        const Roadmap& graph, 
+        const std::vector<int>& missionSequence,
+        const std::vector<Obstacle>& obstacles) 
+    {
+        std::vector<int> fullGlobalPath;
+        std::set<int> criticalNodes(missionSequence.begin(), missionSequence.end());
+
+        if (missionSequence.size() < 2) return fullGlobalPath;
+
+        for (size_t i = 0; i < missionSequence.size() - 1; ++i) {
+            
+            // 1. Compute Raw A* Path between key segments
+            std::vector<int> rawSegment = AStar::computePath(graph, missionSequence[i], missionSequence[i+1]);
+            
+            if (rawSegment.empty()) {
+                ROS_ERROR("Path failed between nodes %d -> %d.", missionSequence[i], missionSequence[i+1]);
+                continue; 
+            }
+
+            // 2. Optimization Logic
+            // If approaching the final target (Gate), do not optimize/shortcut to ensure safe alignment.
+            bool isCriticalApproach = (i == missionSequence.size() - 2);
+            
+            std::vector<int> segmentToAdd;
+            
+            if (isCriticalApproach) {
+                segmentToAdd = rawSegment; 
+            } else {
+                // Remove unnecessary zig-zags
+                segmentToAdd = PlanningUtils::optimizePath(rawSegment, graph, obstacles);
+            }
+
+            // 3. Stitch segments
+            if (fullGlobalPath.empty()) {
+                fullGlobalPath = segmentToAdd;
+            } else {
+                // Skip the first node of the new segment because it duplicates the last node of the previous segment
+                fullGlobalPath.insert(fullGlobalPath.end(), segmentToAdd.begin() + 1, segmentToAdd.end());
+            }
+        }
+
+        return fullGlobalPath;
+    }
+
 }

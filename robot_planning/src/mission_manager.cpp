@@ -113,30 +113,16 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
         if (missionSequence.empty()) throw std::runtime_error("[MissionManager] Task Planning failed (Sequence empty).");
 
 
-        // --- PHASE 3: GRAPH PLANNING ---
-        std::set<int> criticalNodes(missionSequence.begin(), missionSequence.end());
-        std::vector<int> fullGlobalPath;
+        // --- PHASE 3: PATH FINDING ---
+        // Generates the detailed node-by-node path including optimization
+        std::vector<int> fullGlobalPath = GraphSearch::GraphPlanner::computeFullTrajectory(
+            *roadmap, 
+            missionSequence, 
+            map.obstacles.get_obstacles()
+        );
 
-        for (size_t i = 0; i < missionSequence.size() - 1; ++i) {
-            std::vector<int> rawSegment = GraphSearch::AStarPlanner::computePath(*roadmap, missionSequence[i], missionSequence[i+1]);
-            
-            if (rawSegment.empty()) {
-                ROS_ERROR("Path failed between nodes %d -> %d.", missionSequence[i], missionSequence[i+1]);
-                continue; 
-            }
-
-            // Shortcut the path to remove unnecessary zig-zags unless approaching a target.
-            bool isCriticalApproach = (i == missionSequence.size() - 2);
-            std::vector<int> segmentToAdd = isCriticalApproach ? rawSegment : 
-                                                        PlanningUtils::optimizePath(rawSegment, *roadmap, map.obstacles.get_obstacles());
-
-            if (fullGlobalPath.empty()) fullGlobalPath = segmentToAdd;
-            else fullGlobalPath.insert(fullGlobalPath.end(), segmentToAdd.begin() + 1, segmentToAdd.end());
-        }
-
-        metrics.t_total_planning = (ros::Time::now() - t_start_plan).toSec();
         if (fullGlobalPath.empty()) throw std::runtime_error("[MissionManager] Final Global Path is empty.");
-        
+
         // Visualizzazione Debug Rviz
         GraphSearch::rviz_plan(fullGlobalPath, *roadmap, debug_pub_);
 
@@ -150,11 +136,18 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
             viz.saveToFile(ss.str());
         } catch (...) { ROS_WARN("[MissionManager] Visualization save failed."); }
 
+        // -- RECORD TIME: timer for total planning (Task + Graph)
+        metrics.t_total_planning = (ros::Time::now() - t_start_plan).toSec();
+
+
 
         // --- PHASE 4: REAL-TIME EXECUTION ---
         ROS_INFO("[MissionManager] Starting Execution...");
         ros::Time t_start_exec = ros::Time::now();
         bool mission_failed = false;
+
+        // Determine critical nodes for execution phase logic
+        std::set<int> criticalNodes(missionSequence.begin(), missionSequence.end());
 
         for (size_t i = 0; i < fullGlobalPath.size() - 1; ++i) {
             int currentIdx = fullGlobalPath[i];

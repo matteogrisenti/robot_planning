@@ -10,6 +10,7 @@
 #include "libraries/roadmap.h"
 #include "map_library.h"
 
+
 namespace GraphSearch {
 
     // Struttura di supporto per A*
@@ -23,7 +24,7 @@ namespace GraphSearch {
     
 
 
-    class AStarPlanner {
+    class AStar {
     public:
 
         /**
@@ -96,6 +97,29 @@ namespace GraphSearch {
          */
         static double getGraphDistance(const Roadmap& graph, int startIdx, int endIdx);
     };
+
+
+
+
+    class GraphPlanner {
+    public:
+        /**
+         * @brief Expands a high-level mission sequence into a detailed global path.
+         * * Iterates through the mission sequence, computes A* paths between segments,
+         * and applies path optimization (shortcut smoothing) where appropriate.
+         * * @param graph The roadmap.
+         * @param missionSequence The list of high-level nodes to visit (from TaskPlanner).
+         * @param obstacles The list of obstacles (required for optimization checks).
+         * @return std::vector<int> The complete ordered list of nodes for the robot to follow.
+         */
+        static std::vector<int> computeFullTrajectory(
+            const Roadmap& graph, 
+            const std::vector<int>& missionSequence,
+            const std::vector<Obstacle>& obstacles
+        );
+    };
+
+
 
     // Funzione di visualizzazione (definita in rviz_plot_plan.cpp)
     void rviz_plan(const std::vector<int>& path, const Roadmap& graph, const ros::Publisher& pub);
