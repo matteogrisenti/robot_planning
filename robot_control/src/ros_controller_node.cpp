@@ -1,12 +1,14 @@
-#include "robot_control/ros_controller_node.h"
+#include "robot_control/ros_controller_node.h" // .h library
 #include <cmath> // per std::isnan
 
+/* Implementation of the RosControllerNode class */
+// Constructor
 RosControllerNode::RosControllerNode(const std::string& robot_name, bool debug)
     : robot_name_(robot_name), debug_(debug), nh_("~") 
 {
     ROS_INFO("[Controller] Controller initialized for robot: %s", robot_name_.c_str());
 }
-
+// Destructor
 RosControllerNode::~RosControllerNode() {
     sendCommands(0.0, 0.0);
     if (debug_) {
@@ -14,35 +16,41 @@ RosControllerNode::~RosControllerNode() {
     }
 }
 
+// Main control loop
 void RosControllerNode::startController() {
-    initVars();                     
-    startPublisherSubscribers();    
+    initVars();                     // Initialize variables                 
+    startPublisherSubscribers();    // Start publishers and subscribers 
     
-    double k_p = 2.0;
-    double k_th = 4.0;
-    double dt = 0.01;
+    // Default gains
+    double k_p = 2.0;    // Proportional gain           
+    double k_th = 4.0;   // Heading gain
+    double dt = 0.01;    // Time step
     
     nh_.param("k_p", k_p, 2.0);
     nh_.param("k_th", k_th, 4.0);
     nh_.param("dt", dt, 0.01);
     
+    // Initialize Lyapunov Controller
     LyapunovParams params(k_p, k_th, dt);   
     controller_ = std::make_unique<LyapunovController>(params); 
     
     dt_ = dt;
-    ros::Rate rate(1.0 / dt);
+    ros::Rate rate(1.0 / dt);   // Control loop rate
     
     ROS_INFO("[Controller] Starting control loop at %.1f Hz", 1.0/dt);
     
+    // Control loop
     while (ros::ok()) {
         try {
-            robot_state_.x = base_pose_w_(0);
-            robot_state_.y = base_pose_w_(1);
-            robot_state_.theta = base_pose_w_(5);
+            robot_state_.x = base_pose_w_(0);       // Received Current x position
+            robot_state_.y = base_pose_w_(1);       // Received Current y position
+            robot_state_.theta = base_pose_w_(5);   // Received Current heading angle
             
+            // Unwrap desired theta
             des_theta_ = LyapunovController::unwrapAngle(des_theta_, old_theta_);
             old_theta_ = des_theta_;
             
+            // Compute control commands
             std::pair<double, double> control = controller_->controlUnicycle(
                 robot_state_, time_,
                 des_x_, des_y_, des_theta_,
@@ -50,6 +58,7 @@ void RosControllerNode::startController() {
                 false 
             );
             
+            // Extract control commands
             ctrl_v_ = control.first;
             ctrl_omega_ = control.second;
             
@@ -61,12 +70,15 @@ void RosControllerNode::startController() {
                 // ROS_WARN_THROTTLE(1.0, "[Controller] NaN detected! Stopping robot.");
             }
 
+            // Send commands to robot
             sendCommands(ctrl_v_, ctrl_omega_);
-            logData();
+            logData();  // Log data for analysis
             
+            // Spin and sleep
             ros::spinOnce();
             rate.sleep();
             
+            // Update time
             time_ += dt_;
             time_ = std::round(time_ * 10000.0) / 10000.0; 
             
@@ -78,22 +90,24 @@ void RosControllerNode::startController() {
     }
 }
 
+// Initialization methods
 void RosControllerNode::initVars() {
-    base_pose_w_.setZero();     
-    base_twist_w_.setZero();    
-    ctrl_v_ = 0.0;              
-    ctrl_omega_ = 0.0;          
-    v_d_ = 0.0; // Inizializza a 0 per sicurezza
-    omega_d_ = 0.0;             
+    base_pose_w_.setZero();     // Initialize base pose to zero
+    base_twist_w_.setZero();    // Initialize base twist to zero
+    ctrl_v_ = 0.0;              // Control linear velocity
+    ctrl_omega_ = 0.0;          // Control angular velocity
+    v_d_ = 0.0;                 // Desired linear velocity
+    omega_d_ = 0.0;             // Desired angular velocity 
     quaternion_ = Eigen::Quaterniond(1.0, 0.0, 0.0, 0.0);  
-    euler_old_.setZero();       
-    old_theta_ = 0.0;           
+    euler_old_.setZero();       // Initialize euler angles to zero
+    old_theta_ = 0.0;           // Previous desired heading angle
     time_ = 0.0;
     log_counter_ = 0;
     
-    int buffer_size = 10000;    
+    int buffer_size = 10000;    // Default buffer size for logging
     nh_.param("buffer_size", buffer_size, 10000);   
     
+    // Initialize logging data structures
     base_pose_w_log_.resize(6, buffer_size);
     base_twist_w_log_.resize(6, buffer_size);
     time_log_.resize(buffer_size);
@@ -113,14 +127,21 @@ void RosControllerNode::initVars() {
     ROS_INFO("[Controller] Variables initialized");
 }
 
+// Start publishers and subscribers ROS nodes
 void RosControllerNode::startPublisherSubscribers() {
     ros::NodeHandle nh_robot("/" + robot_name_);
-    command_pub_ = nh_robot.advertise<geometry_msgs::Twist>("cmd_vel", 1);
+
+    // Publisher for velocity commands
+    command_pub_ = nh_robot.advertise<geometry_msgs::Twist>("cmd_vel", 1);  
+    
+    // Subscribers for odometry and reference
     odom_sub_ = nh_robot.subscribe("odom", 1, &RosControllerNode::receivePose, this, ros::TransportHints().tcpNoDelay());
     ref_sub_ = nh_robot.subscribe("ref", 1, &RosControllerNode::receiveReference, this, ros::TransportHints().tcpNoDelay());
     ROS_INFO("[Controller] Publishers and subscribers started");
 }
 
+// Callbacks and Helpers
+// Unwrap vector of angles
 Eigen::Vector3d RosControllerNode::unwrapVector(const Eigen::Vector3d& vec, const Eigen::Vector3d& old_vec) {
     Eigen::Vector3d result;
     for (int i = 0; i < 3; ++i) {
@@ -129,6 +150,7 @@ Eigen::Vector3d RosControllerNode::unwrapVector(const Eigen::Vector3d& vec, cons
     return result;
 }
 
+// Callback to receive robot pose
 void RosControllerNode::receivePose(const nav_msgs::Odometry::ConstPtr& msg) {
     quaternion_ = Eigen::Quaterniond(msg->pose.pose.orientation.w, msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z);
     tf::Quaternion q(msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z, msg->pose.pose.orientation.w);

@@ -1,106 +1,83 @@
 #ifndef DUBINS_TRAJECTORY_H
 #define DUBINS_TRAJECTORY_H
 
-#include <cmath>
 #include <vector>
-#include <assert.h>
+#include <cmath>
+#include <limits>
+#include <array>
 
-/*====================================================================
-==========================Data structures=============================
-====================================================================*/
-struct dubinsarc_out
-{
-	long double x0, y0, th0, k, l, xf, yf, thf;
-};
+namespace Kinematics {
 
-struct dubinscurve_out
-{
-	dubinsarc_out a1;
-	dubinsarc_out a2;
-	dubinsarc_out a3;
-	long double L;
-};
+	// Dubins Path Types
+    enum class PathType { LSL, RSR, LSR, RSL, RLR, LRL, NONE };
 
-struct point
-{
-	long double x,y,th;
-};
+	// Segment structure representing a single Dubins path segment
+    struct Segment {
+        double start_x, start_y, start_heading;	// Starting pose of the segment
+        double curvature, length;				// Curvature and length of the segment
+        double end_x, end_y, end_heading;		// Ending pose of the segment
+    };
 
-/*====================================================================
-================================Data==================================
-====================================================================*/
+	// Trajectory structure representing a full Dubins path
+    struct Trajectory {
+        std::array<Segment, 3> segments;	// Three segments of the Dubins path
+        double total_length;				// Total length of the path
+        PathType type;						// Type of the Dubins path
+    };
 
-extern bool DEBUG;
+	// State structure representing a robot pose
+    struct State {
+        double x, y, yaw;
+    };
 
-extern long double X0;
-extern long double Y0;
-extern long double Xf;
-extern long double Yf;
-extern long double Th0;
-extern long double Thf;
-extern long double Kmax;
-extern int pidx;
+    class DubinsSolver {
+    public:
+        DubinsSolver(double max_curvature);
 
-extern int no_waypts;
-extern int step;
-extern long double angle_step;
+		/**
+         * @brief Computes the optimal Dubins path between start and goal states.
+         * * The method normalizes the problem, tests the 6 analytical combinations and 
+         * selects the one with the minimum path cost.
+         * @param start Start state of the robot.
+         * @param goal Goal state desired.
+         * @param result Reference to the Trajectory structure where the path will be stored.
+         * @return true if a valid geometric solution was found.
+         */
+        bool compute_optimal_path(State start, State goal, Trajectory& result);
+        
+		/**
+         * @brief Interpolates the trajectory in a series of discrete points for visualization or control.
+         * @param trajectory The computed trajectory to interpolate.
+         * @param samples_per_seg Number of samples to generate per segment.
+         * @return Vector of sampled states along the path.
+         */
+        static std::vector<State> interpolate(const Trajectory& trajectory, int samples_per_seg);
 
-extern int no_of_samples;
+		/**
+         * @brief Projects a state forward along a line or arc.
+         * * Core function that integrates the robot's kinematics starting from (x0, y0, yaw0) 
+         * for a distance 'dist' given a curvature 'k'.
+         * * @param dist Distance to travel.
+         * @param x0, y0, yaw0 Initial pose.
+         * @param k Applied curvature.
+         * @param out Stato risultante dopo la proiezione.
+         */
+        static void project_state(double dist, double x0, double y0, double yaw0, double k, State& out);
 
-extern dubinscurve_out dubin_curve;
-extern point init, final;
+    private:
+        double _max_k;
 
-extern std::vector<point> best_path;
+        // Core Path Primitives
+        bool solve_LSL(double d_th0, double d_thf, double k_max, double s[3]);
+        bool solve_RSR(double d_th0, double d_thf, double k_max, double s[3]);
+        bool solve_LSR(double d_th0, double d_thf, double k_max, double s[3]);
+        bool solve_RSL(double d_th0, double d_thf, double k_max, double s[3]);
+        bool solve_RLR(double d_th0, double d_thf, double k_max, double s[3]);
+        bool solve_LRL(double d_th0, double d_thf, double k_max, double s[3]);
 
-/*====================================================================
-============================Helper functions==========================
-====================================================================*/
+        // Internal Utilities
+        static double normalize_angle(double angle);
+    };
+}
 
-long double round_up(long double, int);
-
-long double sinc(long double);
-
-long double mod2pi(long double);
-
-void circline(long double, long double, long double, long double, long double, long double &, long double &, long double &);
-
-void dubins_arc(long double, long double, long double, long double, long double, dubinsarc_out *);
-
-void dubins_curve(long double, long double, long double, long double, long double, long double, long double, long double, long double, dubinscurve_out *);
-
-long double rangeSymm(long double);
-
-bool check(long double, long double, long double, long double, long double, long double, long double, long double);
-
-/*====================================================================
-=========================Function Declarations========================
-====================================================================*/
-
-void LSL(long double, long double, long double, long double &, long double &, long double &, bool &);
-
-void RSR(long double, long double, long double, long double &, long double &, long double &, bool &);	
-
-void LSR(long double, long double, long double, long double &, long double &, long double &, bool &);
-
-void RSL(long double, long double, long double, long double &, long double &, long double &, bool &);
-	
-void RLR(long double, long double, long double, long double &, long double &, long double &, bool &);
-
-void LRL(long double, long double, long double, long double &, long double &, long double &, bool &);
-
-void scale_to_standard(long double, long double, long double, long double, long double, long double, long double, long double &, long double &, long double &, long double &);
-
-void scale_from_standard(long double, long double, long double, long double, long double &, long double &, long double &);
-
-void dubins_shortest_path(long double, long double, long double, long double, long double, long double, long double, int &, dubinscurve_out *);
-
-/*====================================================================
-=============================Plot Functions===========================
-====================================================================*/
-
-void plotarc(dubinsarc_out *, std::vector<std::vector<long double>> &points);
-
-void plot_dubins(dubinscurve_out *, std::vector<std::vector<int>> &c1, std::vector<std::vector<int>> &c2, std::vector<std::vector<int>> &c3);
-
-
-#endif 
+#endif

@@ -2,6 +2,7 @@
 
 DubinsPlanner::DubinsPlanner()
     : nh_("~"), 
+      solver_(1.0),
       plan_valid_(false),
       is_executing_(false)
 {
@@ -10,6 +11,7 @@ DubinsPlanner::DubinsPlanner()
 
 DubinsPlanner::DubinsPlanner(ros::NodeHandle& nh, std::string robot_name, double robot_radius, double safety_margin)
     : nh_(nh), 
+      solver_(1.0),
       collision_checker_(robot_radius, safety_margin),
       map_received_(false),
       plan_valid_(false),
@@ -36,37 +38,33 @@ bool DubinsPlanner::planPath(double start_x, double start_y, double start_th,
         return false;
     }
 
-    // 1. Compute Dubins Curve (Geometric)
-    // using 1.0/rho as Kmax
-    dubins_shortest_path(start_x, start_y, start_th, 
-                         goal_x, goal_y, goal_th, 
-                         1.0/rho, current_best_idx_, &current_curve_);
+    // Set up start and goal states
+    Kinematics::State start = {start_x, start_y, start_th};
+    Kinematics::State goal = {goal_x, goal_y, goal_th};
+    ROS_INFO("[DubinsPlanner] Planning from (%.2f, %.2f, %.2f) to (%.2f, %.2f, %.2f) with rho=%.2f", 
+             start_x, start_y, start_th, goal_x, goal_y, goal_th, rho);
 
-    // Reset the variable needed for identify the arc of the current cure during execution
-    current_segment_index_ = 0; // Reset execution index
-    total_arc_distance_ = 0.0; // Reset accumulated distance
+    // Re-initialize solver with current turning radius
+    solver_ = Kinematics::DubinsSolver(1.0 / rho);
 
-    plan_valid_ = false;
+    // Compute Geometric Solution
+    bool found = solver_.compute_optimal_path(start, goal, current_path_);
 
-    // 2. Check if geometric solution exists
-    if (current_best_idx_ >= 0) {
-        // 3. Check Collisions
-        if (collision_checker_.is_dubins_path_valid(current_best_idx_, current_curve_)) {
+    current_segment_index_ = 0;     // Reset execution index
+    plan_valid_ = false;            // Reset plan validity
+
+    if (found) {
+        // Updated collision check using the new Trajectory type
+        if (collision_checker_.is_dubins_path_valid(current_path_)) {
             plan_valid_ = true;
-            ROS_INFO("[DubinsPlanner] Path Found! Length: %.2Lf m", current_curve_.L);
-        } else {
+            ROS_INFO("[DubinsPlanner] Path Found! Length: %.2f m", current_path_.total_length);
+        }else{
             ROS_WARN("[DubinsPlanner] Path found but collides with obstacles.");
         }
-    } else {
-        ROS_WARN("[DubinsPlanner] No geometric Dubins path found.");
     }
 
-    // Debug Visualization
-    if (debug_viz) {
-        publishDebugViz(current_curve_, plan_valid_);
-    }
-    
-    return plan_valid_;
+    if (debug_viz) publishDebugViz(current_path_, plan_valid_);
+    return plan_valid_;             // Return whether a valid plan was found
 }
 
 
@@ -95,102 +93,85 @@ void DubinsPlanner::stop() {
     pub_ref_.publish(ref_msg);
 }
 
-// Real Execution 
+// Real executor of the planned path
 bool DubinsPlanner::spin(double curr_x, double curr_y, double curr_th) {
     if (!is_executing_) return false;
 
-    // Get the current segment geometry
-    dubinsarc_out* active_arc;
-    if (current_segment_index_ == 0) active_arc = &current_curve_.a1;
-    else if (current_segment_index_ == 1) active_arc = &current_curve_.a2;
-    else active_arc = &current_curve_.a3;
-
+    // Access the current segment from the array
+    const Kinematics::Segment& active_seg = current_path_.segments[current_segment_index_];
     double s_local = 0;
 
-    if (active_arc->k == 0) {
-        // --- STRAIGHT LINE LOGIC ---
-        // Project the robot onto the line to find progress
-        s_local = sqrt(pow(curr_x - active_arc->x0, 2) + pow(curr_y - active_arc->y0, 2));
+    if (std::abs(active_seg.curvature) < 1e-9) {
+        // Straight line projection
+        s_local = sqrt(pow(curr_x - active_seg.start_x, 2) + pow(curr_y - active_seg.start_y, 2));
     } else {
-        // --- CIRCLE/ARC LOGIC (Handles full curves) ---
-        // 1. Find the center of the circle
-        double R = 1.0 / active_arc->k;
-        double center_x = active_arc->x0 - R * sin(active_arc->th0);
-        double center_y = active_arc->y0 + R * cos(active_arc->th0);
+        // Arc logic using new segment members
+        double R = 1.0 / active_seg.curvature;
+        double center_x = active_seg.start_x - R * sin(active_seg.start_heading);
+        double center_y = active_seg.start_y + R * cos(active_seg.start_heading);
 
-        // 2. Calculate the angle from the center to the robot
         double angle_now = atan2(curr_y - center_y, curr_x - center_x);
-        double angle_start = atan2(active_arc->y0 - center_y, active_arc->x0 - center_x);
+        double angle_start = atan2(active_seg.start_y - center_y, active_seg.start_x - center_x);
         
-        // 3. Calculate angular difference (careful with wrap-around!)
         double delta_angle = angle_now - angle_start;
-        // Adjust for direction of rotation (k > 0 is Left, k < 0 is Right)
-        if (active_arc->k > 0) { // Left turn
+        if (active_seg.curvature > 0) { // Left
             while (delta_angle < 0) delta_angle += 2 * M_PI;
-        } else { // Right turn
+        } else { // Right
             while (delta_angle > 0) delta_angle -= 2 * M_PI;
         }
-        
-        s_local = fabs(delta_angle * R);
+        s_local = std::abs(delta_angle * R);
     }
 
-    // --- SEGMENT SWITCHING ---
-    // If we have finished the length of the current arc, move to the next
-    if (s_local >= (active_arc->l - 0.1)) { // 10cm margin
+    // Segment switching
+    if (s_local >= (active_seg.length - 0.05)) {
         if (current_segment_index_ < 2) {
             current_segment_index_++;
-            ROS_INFO("Switching to Segment %d", current_segment_index_);
-            return false; // Keep spinning in the next frame
+            return false;
         } else {
-            stop(); // Mission Complete
+            stop();
             return true; 
         }
     }
 
-    // Publish the reference for the current progress
-    publishReference(*active_arc, s_local);
+    publishReference(active_seg, s_local);
     return false;
 }
 
-void DubinsPlanner::publishReference(const dubinsarc_out& arc, double s_local) {
-    // Extract instantaneous point using 'circline' helper of dubins_trajectory.h
-    long double x_ref, y_ref, th_ref;
-    circline(s_local, arc.x0, arc.y0, arc.th0, arc.k, x_ref, y_ref, th_ref);
 
-    // ENHANCED ERROR CHECKING with detailed diagnostics
-    if (std::isnan(x_ref) || std::isnan(y_ref) || std::isnan(th_ref)) {
+void DubinsPlanner::publishReference(const Kinematics::Segment& seg, double s_local) {
+    
+    Kinematics::State ref_state;
+    Kinematics::DubinsSolver::project_state(s_local, seg.start_x, seg.start_y, seg.start_heading, seg.curvature, ref_state);
+
+    // ENHANCED ERROR CHECKING
+    if (std::isnan(ref_state.x) || std::isnan(ref_state.y) || std::isnan(ref_state.yaw)) {
         ROS_ERROR("[DubinsPlanner] === NaN DETECTED IN REFERENCE ===");
         ROS_ERROR("[DubinsPlanner]   Segment: %d/3", current_segment_index_);
-        ROS_ERROR("[DubinsPlanner]   Arc Start: (%.3Lf, %.3Lf, %.3Lf rad)", arc.x0, arc.y0, arc.th0);
-        ROS_ERROR("[DubinsPlanner]   Arc Params: k=%.6Lf, length=%.3Lf m", arc.k, arc.l);
-        ROS_ERROR("[DubinsPlanner]   Local Progress: s=%.3f / %.3Lf m", s_local, arc.l);
-        ROS_ERROR("[DubinsPlanner]   Reference Output: (%.3Lf, %.3Lf, %.3Lf)", x_ref, y_ref, th_ref);
-        ROS_ERROR("[DubinsPlanner] === POSSIBLE CAUSES ===");
-        ROS_ERROR("[DubinsPlanner]   1. s_local exceeds arc.l (overshoot)");
-        ROS_ERROR("[DubinsPlanner]   2. Invalid arc parameters from dubins_shortest_path");
-        ROS_ERROR("[DubinsPlanner]   3. Numerical instability in circline() function");
-        ROS_ERROR("[DubinsPlanner]   4. Robot far from path (localization error?)");
+        ROS_ERROR("[DubinsPlanner]   Arc Start: (%.3f, %.3f, %.3f rad)", seg.start_x, seg.start_y, seg.start_heading);
+        ROS_ERROR("[DubinsPlanner]   Arc Params: k=%.6f, length=%.3f m", seg.curvature, seg.length);
+        ROS_ERROR("[DubinsPlanner]   Local Progress: s=%.3f / %.3f m", s_local, seg.length);
         
-        stop(); // This sends 0 velocity and sets plan_finished = true
+        stop(); 
         return;
     }
 
     robot_control::Reference ref_msg;
-    ref_msg.x_d = (double)x_ref;
-    ref_msg.y_d = (double)y_ref;
-    ref_msg.theta_d = (double)th_ref;
+    ref_msg.x_d = ref_state.x;
+    ref_msg.y_d = ref_state.y;
+    ref_msg.theta_d = ref_state.yaw;
     ref_msg.v_d = target_velocity_;
-    ref_msg.omega_d = (double)arc.k * target_velocity_;
+    ref_msg.omega_d = seg.curvature * target_velocity_; // Velocità angolare = curvatura * velocità lineare
     ref_msg.plan_finished = false;
 
     pub_ref_.publish(ref_msg);
 }
 
-void DubinsPlanner::publishDebugViz(const dubinscurve_out& curve, bool valid) {
-    // Helper to visualize the planned path in Rviz (Red = Invalid, Green = Valid)
+
+// Debug Visualization on RViz
+void DubinsPlanner::publishDebugViz(const Kinematics::Trajectory& trajectory, bool valid) {
     visualization_msgs::MarkerArray ma;
     visualization_msgs::Marker m;
-    m.header.frame_id = "map"; // Or "odom" depending on your system
+    m.header.frame_id = "map"; 
     m.header.stamp = ros::Time::now();
     m.ns = "dubins_plan";
     m.id = 0;
@@ -202,22 +183,25 @@ void DubinsPlanner::publishDebugViz(const dubinscurve_out& curve, bool valid) {
     if (valid) { m.color.g = 1.0; m.color.a = 1.0; } 
     else       { m.color.r = 1.0; m.color.a = 1.0; }
 
-    auto add_arc_points = [&](const dubinsarc_out& arc) {
+    // Lambda aggiornata per usare Kinematics::Segment e project_state
+    auto add_segment_points = [&](const Kinematics::Segment& seg) {
         double step = 0.1;
-        int n = std::ceil(arc.l / step);
-        for(int i=0; i<=n; i++) {
-            double s = std::min((double)arc.l, i*step);
-            long double x, y, th;
-            circline(s, arc.x0, arc.y0, arc.th0, arc.k, x, y, th);
-            geometry_msgs::Point p; p.x = x; p.y = y;
+        int n = std::ceil(seg.length / step);
+        for(int i = 0; i <= n; i++) {
+            double s = std::min(seg.length, i * step);
+            Kinematics::State p_state;
+            Kinematics::DubinsSolver::project_state(s, seg.start_x, seg.start_y, seg.start_heading, seg.curvature, p_state);
+            
+            geometry_msgs::Point p; 
+            p.x = p_state.x; 
+            p.y = p_state.y;
             m.points.push_back(p);
         }
     };
 
-    if (current_best_idx_ >= 0) {
-        add_arc_points(curve.a1);
-        add_arc_points(curve.a2);
-        add_arc_points(curve.a3);
+    // Iteriamo sui 3 segmenti della traiettoria
+    for (const auto& seg : trajectory.segments) {
+        add_segment_points(seg);
     }
     
     ma.markers.push_back(m);

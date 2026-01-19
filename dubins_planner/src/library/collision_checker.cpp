@@ -18,7 +18,7 @@ CollisionChecker::CollisionChecker(double robot_radius, double safety_margin) {
 }
 
 bool CollisionChecker::check(const Point2D& robot_pose) const{
-    // 1. Check Ostacoli Circolari (Veloce ed Esatto)
+    // 1. Check Ostacoli Circolari 
     for (const auto& obs : cached_circles_) {
         // La distanza di collisione è la somma dei raggi
         double collision_dist = effective_robot_radius_ + obs.radius;
@@ -186,30 +186,48 @@ bool CollisionChecker::is_state_valid(double x, double y) const {
 }
 
 
-bool CollisionChecker::is_dubins_path_valid(const int best_word, const dubinscurve_out& curve) const {
-    if (best_word < 0) return false; // Percorso impossibile
 
-    // 2. Campiona e valida ogni punto lungo la curva
-    double step_size = 0.1; // Check ogni 10cm
-    
-    auto check_arc = [&](const dubinsarc_out& arc) -> bool {
-        int steps = std::ceil(arc.l / step_size);
+// Validates the entire 3-segment trajectory against cached obstacles.
+bool CollisionChecker::is_dubins_path_valid(const Kinematics::Trajectory& trajectory) const {
+    // If no valid path type was found, it's invalid by default
+    if (trajectory.type == Kinematics::PathType::NONE) return false;
+
+    const double step_size = 0.1; // Check collision every 10cm
+
+    // Lambda to check a single segment
+    auto check_segment = [&](const Kinematics::Segment& seg) -> bool {
+        // Calculate number of samples based on segment length
+        int steps = std::ceil(seg.length / step_size);
+        
         for (int i = 0; i <= steps; ++i) {
-            double s = (i * step_size > arc.l) ? arc.l : i * step_size;
-            long double x, y, th;
-            circline(s, arc.x0, arc.y0, arc.th0, arc.k, x, y, th);
+            // Ensure we don't overshoot the segment length
+            double s = std::min(seg.length, i * step_size);
+            
+            Kinematics::State p;
+            // Use the new projection method from your DubinsSolver
+            Kinematics::DubinsSolver::project_state(
+                s, 
+                seg.start_x, 
+                seg.start_y, 
+                seg.start_heading, 
+                seg.curvature, 
+                p
+            );
 
-            // Se anche un solo punto collide, il percorso è invalido
-            if (!is_state_valid((double)x, (double)y)) {
+            // If a single sampled point is in collision, the whole path is invalid
+            if (!is_state_valid(p.x, p.y)) {
                 return false; 
             }
         }
         return true;
     };
 
-    if (!check_arc(curve.a1)) return false;
-    if (!check_arc(curve.a2)) return false;
-    if (!check_arc(curve.a3)) return false;
+    // Iterate through all 3 segments of the Dubins path
+    for (const auto& segment : trajectory.segments) {
+        if (!check_segment(segment)) {
+            return false; // Collision found in this segment
+        }
+    }
 
-    return true; // Percorso pulito
+    return true; // All segments are clear
 }
