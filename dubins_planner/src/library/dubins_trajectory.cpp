@@ -1,4 +1,5 @@
 #include "dubins_planner/dubins_trajectory.h"
+#include <algorithm>
 
 namespace Kinematics {
 
@@ -79,7 +80,9 @@ namespace Kinematics {
         return true;
     }
 
-    bool DubinsSolver::compute_optimal_path(State start, State goal, Trajectory& result) {
+    void DubinsSolver::compute_candidates(State start, State goal, int top_k, std::vector<Trajectory>& results) {
+        results.clear();
+
         double dx = goal.x - start.x;
         double dy = goal.y - start.y;
         double d_real = std::hypot(dx, dy);
@@ -88,12 +91,9 @@ namespace Kinematics {
         double alpha = normalize_angle(start.yaw - theta);
         double beta = normalize_angle(goal.yaw - theta);
         
-        // Raggio di curvatura rho = 1/k
         double rho = 1.0 / _max_k;
-        double d = d_real / rho; // Distanza normalizzata rispetto al raggio
+        double d = d_real / rho; // Distanza normalizzata
 
-        double best_l = std::numeric_limits<double>::max();
-        int best_idx = -1;
         double lengths[6][3];
         bool valid[6];
 
@@ -104,56 +104,67 @@ namespace Kinematics {
         valid[4] = solve_RLR(alpha, beta, d, lengths[4]);
         valid[5] = solve_LRL(alpha, beta, d, lengths[5]);
 
+        // Struct locale per ordinamento
+        struct Candidate {
+            int idx;
+            double total_len;
+        };
+        std::vector<Candidate> candidates;
+
         for (int i = 0; i < 6; ++i) {
             if (valid[i]) {
                 double total = lengths[i][0] + lengths[i][1] + lengths[i][2];
-                if (total < best_l) {
-                    best_l = total;
-                    best_idx = i;
-                }
+                candidates.push_back({i, total});
             }
         }
 
-        if (best_idx == -1) return false;
+        // Ordina per lunghezza crescente (shortest path first)
+        std::sort(candidates.begin(), candidates.end(), [](const Candidate& a, const Candidate& b){
+            return a.total_len < b.total_len;
+        });
 
-        // Converti le lunghezze normalizzate in metri
-        double seg_lens[3] = { lengths[best_idx][0] * rho, 
-                               lengths[best_idx][1] * rho, 
-                               lengths[best_idx][2] * rho };
-
+        // Genera Trajectory per i primi top_k candidati
+        int count = std::min((int)candidates.size(), top_k);
         static const double k_signs[6][3] = {
             {1,0,1}, {-1,0,-1}, {1,0,-1}, {-1,0,1}, {-1,1,-1}, {1,-1,1}
         };
 
-        double cur_x = start.x, cur_y = start.y, cur_yaw = start.yaw;
-
-        for (int i = 0; i < 3; ++i) {
-            result.segments[i].start_x = cur_x;
-            result.segments[i].start_y = cur_y;
-            result.segments[i].start_heading = cur_yaw;
-            result.segments[i].curvature = k_signs[best_idx][i] * _max_k;
-            result.segments[i].length = seg_lens[i];
+        for (int j = 0; j < count; ++j) {
+            int idx = candidates[j].idx;
+            Trajectory traj;
+            traj.type = static_cast<PathType>(idx);
             
-            State next;
-            // FORZATURA FINALE: L'ultimo segmento deve finire esattamente sul goal
-            if (i == 2) {
-                next.x = goal.x;
-                next.y = goal.y;
-                next.yaw = goal.yaw;
-            } else {
-                project_state(seg_lens[i], cur_x, cur_y, cur_yaw, result.segments[i].curvature, next);
+            // Converti lunghezze in metri
+            double seg_lens_m[3] = { lengths[idx][0] * rho, 
+                                     lengths[idx][1] * rho, 
+                                     lengths[idx][2] * rho };
+            
+            traj.total_length = seg_lens_m[0] + seg_lens_m[1] + seg_lens_m[2];
+
+            double cur_x = start.x, cur_y = start.y, cur_yaw = start.yaw;
+
+            for (int i = 0; i < 3; ++i) {
+                traj.segments[i].start_x = cur_x;
+                traj.segments[i].start_y = cur_y;
+                traj.segments[i].start_heading = cur_yaw;
+                traj.segments[i].curvature = k_signs[idx][i] * _max_k;
+                traj.segments[i].length = seg_lens_m[i];
+                
+                State next;
+                if (i == 2) {
+                    next.x = goal.x; next.y = goal.y; next.yaw = goal.yaw;
+                } else {
+                    project_state(seg_lens_m[i], cur_x, cur_y, cur_yaw, traj.segments[i].curvature, next);
+                }
+                
+                traj.segments[i].end_x = next.x;
+                traj.segments[i].end_y = next.y;
+                traj.segments[i].end_heading = next.yaw;
+                
+                cur_x = next.x; cur_y = next.y; cur_yaw = next.yaw;
             }
-            
-            result.segments[i].end_x = next.x;
-            result.segments[i].end_y = next.y;
-            result.segments[i].end_heading = next.yaw;
-            
-            cur_x = next.x; cur_y = next.y; cur_yaw = next.yaw;
+            results.push_back(traj);
         }
-
-        result.total_length = seg_lens[0] + seg_lens[1] + seg_lens[2];
-        result.type = static_cast<PathType>(best_idx);
-        return true;
     }
 
     std::vector<State> DubinsSolver::interpolate(const Trajectory& trajectory, int samples) {

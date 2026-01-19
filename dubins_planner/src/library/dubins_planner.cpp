@@ -9,6 +9,8 @@ DubinsPlanner::DubinsPlanner()
     // Default constructor (no publishers)
 }
 
+
+
 DubinsPlanner::DubinsPlanner(ros::NodeHandle& nh, std::string robot_name, double robot_radius, double safety_margin)
     : nh_(nh), 
       solver_(1.0),
@@ -22,11 +24,15 @@ DubinsPlanner::DubinsPlanner(ros::NodeHandle& nh, std::string robot_name, double
     pub_viz_ = nh_.advertise<visualization_msgs::MarkerArray>("/" + robot_name + "/planner_debug", 1);
 }
 
+
+
 void DubinsPlanner::setMap(const Map& map) {
     collision_checker_.update_collision_cache(map);
     map_received_ = true;
     ROS_INFO("[DubinsPlanner] Map updated.");
 }
+
+
 
 // Initialize the current_curve_ and check for collisions
 bool DubinsPlanner::planPath(double start_x, double start_y, double start_th, 
@@ -47,25 +53,45 @@ bool DubinsPlanner::planPath(double start_x, double start_y, double start_th,
     // Re-initialize solver with current turning radius
     solver_ = Kinematics::DubinsSolver(1.0 / rho);
 
-    // Compute Geometric Solution
-    bool found = solver_.compute_optimal_path(start, goal, current_path_);
+    // Get top 3 candidates 
+    std::vector<Kinematics::Trajectory> candidates;
+    solver_.compute_candidates(start, goal, 3, candidates);
+    if (candidates.empty()) {
+        ROS_WARN("[DubinsPlanner] No kinematic path found.");
+        return false;
+    }
 
     current_segment_index_ = 0;     // Reset execution index
     plan_valid_ = false;            // Reset plan validity
 
-    if (found) {
-        // Updated collision check using the new Trajectory type
-        if (collision_checker_.is_dubins_path_valid(current_path_)) {
+    // --- Iterate through candidates ---
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        const auto& traj = candidates[i];
+        
+        // Check collision for this specific trajectory
+        if (collision_checker_.is_dubins_path_valid(traj)) {
+            // Found a valid one!
+            current_path_ = traj;
             plan_valid_ = true;
-            ROS_INFO("[DubinsPlanner] Path Found! Length: %.2f m", current_path_.total_length);
-        }else{
-            ROS_WARN("[DubinsPlanner] Path found but collides with obstacles.");
+            ROS_INFO("[DubinsPlanner] Selected Candidate #%lu (Type: %d, Length: %.2f)", 
+                     i + 1, (int)current_path_.type, current_path_.total_length);
+            break; // Stop checking, we found the best valid one
+        } else {
+            ROS_INFO("[DubinsPlanner] Candidate #%lu (Type: %d, Length: %.2f) COLLIDES. Trying next...", 
+                     i + 1, (int)traj.type, traj.total_length);
         }
+    }
+
+    if (!plan_valid_) {
+        ROS_WARN("[DubinsPlanner] All top 3 candidates collided!");
+        // Optionally, assign the first candidate to current_path_ just for debug visualization (in RED)
+        current_path_ = candidates[0]; 
     }
 
     if (debug_viz) publishDebugViz(current_path_, plan_valid_);
     return plan_valid_;             // Return whether a valid plan was found
 }
+
 
 
 // Initialize execution state 

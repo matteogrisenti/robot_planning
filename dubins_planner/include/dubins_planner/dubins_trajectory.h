@@ -34,16 +34,15 @@ namespace Kinematics {
     public:
         DubinsSolver(double max_curvature);
 
-		/**
-         * @brief Computes the optimal Dubins path between start and goal states.
-         * * The method normalizes the problem, tests the 6 analytical combinations and 
-         * selects the one with the minimum path cost.
-         * @param start Start state of the robot.
-         * @param goal Goal state desired.
-         * @param result Reference to the Trajectory structure where the path will be stored.
-         * @return true if a valid geometric solution was found.
+        /**
+         * @brief Computes the top_k best Dubins paths between start and goal states.
+         * @param start The starting state (x, y, yaw).
+         * @param goal The goal state (x, y, yaw).
+         * @param results Vector to store the computed trajectories (sorted by length).
+         * @param top_k Number of top candidate paths to return (default 1).
+         * @return true if at least one valid path was found.
          */
-        bool compute_optimal_path(State start, State goal, Trajectory& result);
+        void compute_candidates(State start, State goal, int top_k, std::vector<Trajectory>& results);
         
 		/**
          * @brief Interpolates the trajectory in a series of discrete points for visualization or control.

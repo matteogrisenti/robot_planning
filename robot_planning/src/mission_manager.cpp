@@ -48,7 +48,7 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
     metrics.success = false;
 
     // Wait for Odom
-    ROS_INFO("Waiting for Odometry...");
+    ROS_INFO("[MissionManager] Waiting for Odometry...");
     while(ros::ok() && !odom_active_) ros::Duration(0.1).sleep();
 
     Vertex startPose(0,0);
@@ -56,7 +56,7 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
         std::lock_guard<std::mutex> lock(odom_mutex_);
         startPose = current_pose_odom_;
     }
-    ROS_INFO("Start Pose Locked: (%.2f, %.2f)", startPose.x, startPose.y);
+    ROS_INFO("[MissionManager] Start Pose Locked: (%.2f, %.2f)", startPose.x, startPose.y);
 
     try {
         ROS_INFO("[MissionManager] Started mission with planner '%s' and time limit %.1f s", planner_type.c_str(), time_limit);

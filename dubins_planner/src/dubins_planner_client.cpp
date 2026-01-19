@@ -4,7 +4,7 @@
 DubinsClient::DubinsClient(std::string name) : ac_(name, true), action_name_(name) {
     ROS_INFO("[Dubins Client] Waiting for action server [%s] to start...", action_name_.c_str());
     ac_.waitForServer(); 
-    ROS_INFO("Action server [%s] started, sending goals.", action_name_.c_str());
+    ROS_INFO("[Dubins Client] Action server [%s] started, sending goals.", action_name_.c_str());
 }
 
 void DubinsClient::sendGoal(double x, double y, double theta, double v, double r) {
@@ -40,7 +40,7 @@ void DubinsClient::doneCb(const actionlib::SimpleClientGoalState& state,
     if (state == actionlib::SimpleClientGoalState::SUCCEEDED) {
         ROS_INFO("[Dubins Client] Goal Reached: %s", result->message.c_str());
     } else {
-        ROS_WARN("Goal Failed/Preempted: %s", result->message.c_str());
+        ROS_WARN("[Dubins Client] Goal Failed/Preempted: %s", result->message.c_str());
     }
 }
 
