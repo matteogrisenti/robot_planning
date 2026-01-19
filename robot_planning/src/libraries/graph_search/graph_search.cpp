@@ -1,4 +1,4 @@
-#include "astar.h"
+#include "graph_search.h"
 #include <iostream>
 #include <ros/ros.h> // Per logging
 

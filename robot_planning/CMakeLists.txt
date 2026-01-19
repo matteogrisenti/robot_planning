@@ -110,7 +110,7 @@ target_link_libraries(roadmap_factory_lib
 
 # --- Graph Search Library (A*) ---
 add_library(graph_search_lib 
-  src/libraries/graph_search/astar.cpp
+  src/libraries/graph_search/graph_search.cpp
   src/libraries/graph_search/rviz_plot_plan.cpp)
 target_link_libraries(graph_search_lib
   roadmap_lib
@@ -151,9 +151,9 @@ target_link_libraries(test_roadmap
 )
 add_dependencies(test_roadmap ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
-# --- A* Planning Test Node ---
-add_executable(astar_planning_test_node src/libraries/graph_search/astar_planning_test_node.cpp)
-target_link_libraries(astar_planning_test_node
+# --- Graph Search Test Node ---
+add_executable(graph_search_test_node src/libraries/graph_search/graph_search_test_node.cpp)
+target_link_libraries(graph_search_test_node
   graph_search_lib
   sample_planning_lib
   combinatorial_planning_lib 
@@ -162,7 +162,7 @@ target_link_libraries(astar_planning_test_node
   ${catkin_LIBRARIES}
   ${OpenCV_LIBRARIES}
 )
-add_dependencies(astar_planning_test_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(graph_search_test_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 # --- Complete Planning Pipeline Node ---
 # add_executable(complete_planning_pipeline_node src/complete_planning_pipeline.cpp)

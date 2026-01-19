@@ -17,7 +17,7 @@
 #include "map_library.h"
 #include "roadmap.h"
 #include "roadmap_factory.h"
-#include "astar.h" 
+#include "graph_search.h" 
 #include "dubins_planner_client.h"
 #include "planning_utils.h" 
 #include "libraries/roadmap/roadmap_visualization.h" // NUOVO: Header per salvataggio immagini

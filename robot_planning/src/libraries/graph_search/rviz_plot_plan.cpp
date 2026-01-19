@@ -1,4 +1,4 @@
-#include "astar.h"
+#include "graph_search.h"
 
 #include <ros/ros.h>
 #include <visualization_msgs/Marker.h>

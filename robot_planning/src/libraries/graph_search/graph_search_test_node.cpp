@@ -11,7 +11,7 @@
 #include "roadmap.h"
 #include "combinatorial_planning.h"
 #include "sample_based_planning.h"
-#include "astar.h" 
+#include "graph_search.h" 
 #include "roadmap_factory.h"
 
 using namespace std;
