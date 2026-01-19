@@ -134,27 +134,23 @@ namespace GraphSearch {
                     // Se una vittima è irraggiungibile (es. isolata), ignorala
                     if (distToVictim > 1e8 || distToGate > 1e8) continue;
 
+                    // Robot velocity è già ridotta del 15% per sicurezza (nel benchmark)
                     double timeToVictim = distToVictim / robot_velocity;
                     double timeToExit = distToGate / robot_velocity;
-                    
-                    // Tempo stimato extra (es. rallentamento/curva/recupero)
-                    double overhead = 2.0; 
 
                     // --- CHECK DEL BUDGET ---
                     // Possiamo andare alla vittima E poi scappare al gate?
-                    double projectedTotalTime = currentTime + timeToVictim + timeToExit + overhead;
+                    double projectedTotalTime = currentTime + timeToVictim + timeToExit;
 
                     if (projectedTotalTime <= time_limit) {
                         
                         // --- EURISTICA DI SELEZIONE ---
-                        // Score = Valore / Costo (Greedy)
-                        // Massimizza il valore (raggio) minimizzando il tempo speso
-                        double score = candidates[i].value / (timeToVictim + 1.0); 
+                        double score = candidates[i].value / (timeToVictim + timeToExit); 
                         
                         if (score > bestScore) {
                             bestScore = score;
                             bestIdx = i;
-                            timeConsumedForBest = timeToVictim + overhead; // Tempo per arrivare LÌ (non per uscire)
+                            timeConsumedForBest = timeToVictim; // Tempo per arrivare alla vittima (non per uscire)
                         }
                     }
                 }
