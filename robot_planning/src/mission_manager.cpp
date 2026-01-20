@@ -5,11 +5,19 @@
 #include <set> 
 #include <map>
 #include <algorithm> 
+#include <cmath> 
 
 #include "libraries/roadmap_factory.h"
 #include "libraries/graph_search.h" 
 #include "libraries/planning_utils.h" 
 #include "libraries/roadmap/roadmap_visualization.h"
+
+// --- CONFIGURATION CONSTANTS ---
+const double ROBOT_VELOCITY = 0.5;    
+const double TURNING_RADIUS = 0.5;    
+const int MAX_DUBINS_RETRIES = 3; 
+// Distanza minima tra waypoint inviati al controller (per evitare loop su nodi vicini)
+const double MIN_EXECUTION_DIST = 1.5; 
 
 MissionManager::MissionManager(ros::NodeHandle& nh) 
     : nh_(nh), current_speed_(0.0), current_pose_odom_(0,0), odom_active_(false) {
@@ -46,6 +54,11 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
     metrics.victims_collected = 0;
     metrics.dubins_retries = 0;
     metrics.success = false;
+    
+    // Init timer values (Standard, no detailed breakdown to avoid compilation errors)
+    metrics.t_roadmap = 0.0;
+    metrics.t_total_planning = 0.0;
+    metrics.t_execution = 0.0;
 
     // Wait for Odom
     ROS_INFO("[MissionManager] Waiting for Odometry...");
@@ -96,27 +109,54 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
         metrics.t_roadmap = (ros::Time::now() - t_start_roadmap).toSec();
 
 
-        // --- PHASE 2: TASK PLANNING ---
+        // --- PHASE 2 & 3: TASK PLANNING & PATH FINDING ---
         ros::Time t_start_plan = ros::Time::now(); 
         ROS_INFO("[MissionManager] Planning Mission Sequence...");
         
-        // Use a slightly conservative velocity for planning estimates
-        double conservative_velocity = ROBOT_VELOCITY * 0.75;
+        double conservative_velocity = ROBOT_VELOCITY * 0.90;
         std::vector<int> missionSequence = GraphSearch::TaskPlanner::planMissionSequence(
             *roadmap, startPose, victims, gatePose, time_limit, conservative_velocity
         );
         
         if (missionSequence.empty()) throw std::runtime_error("[MissionManager] Task Planning failed (Sequence empty).");
 
+        ROS_INFO("[MissionManager] Generating Detailed Path...");
+        std::vector<int> fullGlobalPath;
+        
+        if (missionSequence.size() >= 2) {
+            for (size_t i = 0; i < missionSequence.size() - 1; ++i) {
+                
+                // 3.1 GRAPH SEARCH (A*)
+                std::vector<int> rawSegment = GraphSearch::AStar::computePath(*roadmap, missionSequence[i], missionSequence[i+1]);
 
-        // --- PHASE 3: PATH FINDING ---
-        std::vector<int> fullGlobalPath = GraphSearch::GraphPlanner::computeFullTrajectory(
-            *roadmap, 
-            missionSequence, 
-            map.obstacles.get_obstacles()
-        );
+                if (rawSegment.empty()) {
+                    ROS_ERROR("Path failed between nodes %d -> %d.", missionSequence[i], missionSequence[i+1]);
+                    continue; 
+                }
+
+                // 3.2 PATH OPTIMIZATION
+                bool isCriticalApproach = (i == missionSequence.size() - 2);
+                std::vector<int> segmentToAdd;
+                
+                if (isCriticalApproach) {
+                    segmentToAdd = rawSegment; 
+                } else {
+                    segmentToAdd = PlanningUtils::optimizePath(rawSegment, *roadmap, map.obstacles.get_obstacles());
+                }
+
+                // Stitching
+                if (fullGlobalPath.empty()) {
+                    fullGlobalPath = segmentToAdd;
+                } else {
+                    fullGlobalPath.insert(fullGlobalPath.end(), segmentToAdd.begin() + 1, segmentToAdd.end());
+                }
+            }
+        }
 
         if (fullGlobalPath.empty()) throw std::runtime_error("[MissionManager] Final Global Path is empty.");
+
+        // TOTAL PLANNING TIME
+        metrics.t_total_planning = (ros::Time::now() - t_start_plan).toSec();
 
         // Debug Visualization
         GraphSearch::rviz_plan(fullGlobalPath, *roadmap, debug_pub_);
@@ -131,46 +171,76 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
             viz.saveToFile(ss.str());
         } catch (...) { ROS_WARN("[MissionManager] Visualization save failed."); }
 
-        metrics.t_total_planning = (ros::Time::now() - t_start_plan).toSec();
-
 
         // --- PHASE 4: REAL-TIME EXECUTION ---
         ROS_INFO("[MissionManager] Starting Execution...");
         ros::Time t_start_exec = ros::Time::now();
         bool mission_failed = false;
 
-        // Tracks the current target in the mission sequence.
-        // missionSequence[0] is Start, so the first real target is at index 1.
-        size_t currentTargetSeqIdx = 1;
+        // --- PATH PRUNING (CRUCIAL FOR MCR) ---
+        // Filters intermediate nodes BEFORE execution starts.
+        std::vector<int> execPath;
+        if (!fullGlobalPath.empty()) {
+            execPath.push_back(fullGlobalPath[0]); // Keep Start
+            int lastKeptIdx = fullGlobalPath[0];
+            
+            // Fast lookup for critical targets
+            std::set<int> targetsSet(missionSequence.begin(), missionSequence.end());
 
-        for (size_t i = 0; i < fullGlobalPath.size() - 1; ++i) {
-            int currentIdx = fullGlobalPath[i];
-            int nextIdx = fullGlobalPath[i+1];
+            for (size_t k = 1; k < fullGlobalPath.size(); ++k) {
+                int currIdx = fullGlobalPath[k];
+                
+                bool isTarget = (targetsSet.find(currIdx) != targetsSet.end());
+                bool isLastNode = (k == fullGlobalPath.size() - 1);
+                
+                // Keep node if it's a Target, the very last node, or far enough
+                if (isTarget || isLastNode) {
+                    execPath.push_back(currIdx);
+                    lastKeptIdx = currIdx;
+                } else {
+                    const Vertex& vLast = roadmap->getVertex(lastKeptIdx);
+                    const Vertex& vCurr = roadmap->getVertex(currIdx);
+                    double dist = std::hypot(vCurr.x - vLast.x, vCurr.y - vLast.y);
+                    
+                    if (dist >= MIN_EXECUTION_DIST) {
+                        execPath.push_back(currIdx);
+                        lastKeptIdx = currIdx;
+                    }
+                }
+            }
+        }
+        ROS_INFO("[MissionManager] Path Pruned: %lu -> %lu nodes (Min Dist: %.1fm)", 
+                 fullGlobalPath.size(), execPath.size(), MIN_EXECUTION_DIST);
+
+        // --- EXECUTION LOOP ---
+        size_t currentTargetSeqIdx = 1; 
+
+        for (size_t i = 0; i < execPath.size() - 1; ++i) {
+            int currentIdx = execPath[i];
+            int nextIdx = execPath[i+1];
             const Vertex& currentV = roadmap->getVertex(currentIdx);
             const Vertex& targetV = roadmap->getVertex(nextIdx);
 
-            // Determine if the next node is a Key Mission Target (Victim or Gate)
-            // This prevents the robot from stopping at intermediate path nodes.
             bool isCurrentMissionTarget = (currentTargetSeqIdx < missionSequence.size() && 
                                            nextIdx == missionSequence[currentTargetSeqIdx]);
             
-            // Check if it is the absolute final Gate
+            // Check if this is the final segment of the entire path
+            bool isEndOfPath = (i == execPath.size() - 2);
             bool isFinalGate = (isCurrentMissionTarget && currentTargetSeqIdx == missionSequence.size() - 1);
+            
+            // Safety: Force final gate behavior if we are at the end of the pruned path
+            if (isEndOfPath) isFinalGate = true;
 
-            // --- HEADING OPTIMIZATION (Prevent Loops) ---
             double goal_theta = 0.0;
             double approach_angle = std::atan2(targetV.y - currentV.y, targetV.x - currentV.x);
 
-            // Logic: If we are NOT at the target yet, look ahead to the NEXT node to smooth the turn.
-            // BUT: If the next node is too close, don't force it (it causes loops).
-            if (!isCurrentMissionTarget && i + 2 < fullGlobalPath.size()) {
-                const Vertex& futureV = roadmap->getVertex(fullGlobalPath[i+2]);
+            // Lookahead
+            if (!isCurrentMissionTarget && i + 2 < execPath.size()) {
+                const Vertex& futureV = roadmap->getVertex(execPath[i+2]);
                 double dist_to_future = std::hypot(futureV.x - targetV.x, futureV.y - targetV.y);
                 
-                // Only optimize heading if there is enough space (> 2.0m)
                 if (dist_to_future > 2.0) {
                     double exit_angle = std::atan2(futureV.y - targetV.y, futureV.x - targetV.x);
-                    // Only smooth if the angle change is reasonable (< 60 degrees)
                     if (std::abs(normalizeAngle(exit_angle - approach_angle)) <= (M_PI/3.0)) 
                         goal_theta = exit_angle;
                     else 
@@ -182,18 +252,13 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
                 goal_theta = approach_angle;
             }
 
-
-            // --- NAVIGATION LOOP (CONSTANT VELOCITY) ---
+            // Retry Loop
             int retry_count = 0;
-            // Retry more aggressively only for actual targets
             int current_max_retries = isCurrentMissionTarget ? MAX_DUBINS_RETRIES : 1;
             bool node_success = false;
 
             while (!node_success && retry_count <= current_max_retries) {
-                // FORCE CONSTANT VELOCITY: Always send ROBOT_VELOCITY
                 double v_cmd = ROBOT_VELOCITY;
-                
-                // Only stop/reset planner if we are stuck in a retry loop
                 if (retry_count > 0) v_cmd = ROBOT_VELOCITY * 0.8; 
 
                 dubins_client_->sendGoal(targetV.x, targetV.y, goal_theta, v_cmd, TURNING_RADIUS);
@@ -207,11 +272,10 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
                         if (dubins_client_->isSuccess()) node_success = true;
                         break;
                     }
-
+                    
                     // Stall Detection
                     double v_now = 0.0;
                     { std::lock_guard<std::mutex> lock(odom_mutex_); v_now = current_speed_; }
-
                     if (ros::Time::now() - segment_start_time > ros::Duration(1.0)) { 
                         if (v_now > 0.05) stall_start_time = ros::Time::now();
                         else if (ros::Time::now() - stall_start_time > ros::Duration(3.0)) {
@@ -226,7 +290,6 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
                 
                 retry_count++;
                 metrics.dubins_retries++;
-                // Small pause only on failure to let planner reset
                 if (retry_count <= current_max_retries) ros::Duration(0.1).sleep();
             }
 
@@ -237,10 +300,7 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
                     break; 
                 }
             } else {
-                // --- SUCCESS LOGIC ---
                 if (isCurrentMissionTarget) {
-                    
-                    // 1. COLLECT SCORE (No Stop)
                     if (!isFinalGate) {
                         metrics.victims_collected++;
                         if (victim_score_map.count(nextIdx)) {
@@ -248,17 +308,16 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
                             ROS_INFO("[MissionManager] Victim Collected at Node %d. Score: %.1f", nextIdx, metrics.total_score);
                         }
                     }
-
-                    // 2. ADVANCE TARGET
+                    
                     currentTargetSeqIdx++;
 
-                    // 3. STOP ONLY IF FINAL GATE
+                    // --- STOP LOGIC ---
                     if (isFinalGate) {
                         ROS_INFO("[MissionManager] Final Gate Reached. Mission Complete.");
-                        dubins_client_->sendGoal(targetV.x, targetV.y, goal_theta, 0.0, TURNING_RADIUS);
-                        ros::Duration(1.0).sleep();
+                        // The planner stops automatically (v=0) when goal is reached.
+                        // We wait 2 seconds to ensure the robot actually comes to a halt before the node exits.
+                        ros::Duration(2.0).sleep();
                     }
-                    // Else: Continue immediately to next node without stopping
                 }
             }
         }
