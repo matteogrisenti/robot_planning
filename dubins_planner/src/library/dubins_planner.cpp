@@ -1,4 +1,5 @@
 #include "dubins_planner/dubins_planner.h"
+#include <algorithm> // Necessario per std::sort
 
 DubinsPlanner::DubinsPlanner()
     : nh_("~"), 
@@ -8,8 +9,6 @@ DubinsPlanner::DubinsPlanner()
 {
     // Default constructor (no publishers)
 }
-
-
 
 DubinsPlanner::DubinsPlanner(ros::NodeHandle& nh, std::string robot_name, double robot_radius, double safety_margin)
     : nh_(nh), 
@@ -24,15 +23,11 @@ DubinsPlanner::DubinsPlanner(ros::NodeHandle& nh, std::string robot_name, double
     pub_viz_ = nh_.advertise<visualization_msgs::MarkerArray>("/" + robot_name + "/planner_debug", 1);
 }
 
-
-
 void DubinsPlanner::setMap(const Map& map) {
     collision_checker_.update_collision_cache(map);
     map_received_ = true;
     ROS_INFO("[DubinsPlanner] Map updated.");
 }
-
-
 
 // Initialize the current_curve_ and check for collisions
 bool DubinsPlanner::planPath(double start_x, double start_y, double start_th, 
@@ -53,9 +48,10 @@ bool DubinsPlanner::planPath(double start_x, double start_y, double start_th,
     // Re-initialize solver with current turning radius
     solver_ = Kinematics::DubinsSolver(1.0 / rho);
 
-    // Get top 3 candidates 
+    // Get ALL candidates (usually 6) instead of just top 3 to filter properly
     std::vector<Kinematics::Trajectory> candidates;
-    solver_.compute_candidates(start, goal, 3, candidates);
+    solver_.compute_candidates(start, goal, 6, candidates);
+
     if (candidates.empty()) {
         ROS_WARN("[DubinsPlanner] No kinematic path found.");
         return false;
@@ -64,7 +60,22 @@ bool DubinsPlanner::planPath(double start_x, double start_y, double start_th,
     current_segment_index_ = 0;     // Reset execution index
     plan_valid_ = false;            // Reset plan validity
 
-    // --- Iterate through candidates ---
+    // --- FIX LOOP 360 GRADI & COMPILATION ERROR ---
+    // Ordiniamo i candidati per penalizzare i percorsi "Curve-Curve-Curve" (CCC) che creano loop.
+    // I path RLR e LRL sono quelli che causano giri su se stessi.
+    std::sort(candidates.begin(), candidates.end(), [](const Kinematics::Trajectory& a, const Kinematics::Trajectory& b) {
+        // FIX COMPILAZIONE: Controllo esplicito dei tipi enum invece di usare >= int
+        bool a_is_loop = (a.type == Kinematics::PathType::RLR || a.type == Kinematics::PathType::LRL);
+        bool b_is_loop = (b.type == Kinematics::PathType::RLR || b.type == Kinematics::PathType::LRL);
+        
+        // Se uno è un loop e l'altro no, vince quello che NON è un loop
+        if (a_is_loop != b_is_loop) return !a_is_loop;
+        
+        // Altrimenti vince il più corto
+        return a.total_length < b.total_length;
+    });
+
+    // --- Iterate through sorted candidates ---
     for (size_t i = 0; i < candidates.size(); ++i) {
         const auto& traj = candidates[i];
         
@@ -77,13 +88,12 @@ bool DubinsPlanner::planPath(double start_x, double start_y, double start_th,
                      i + 1, (int)current_path_.type, current_path_.total_length);
             break; // Stop checking, we found the best valid one
         } else {
-            ROS_INFO("[DubinsPlanner] Candidate #%lu (Type: %d, Length: %.2f) COLLIDES. Trying next...", 
-                     i + 1, (int)traj.type, traj.total_length);
+            // ROS_INFO("[DubinsPlanner] Candidate #%lu Collides...", i + 1);
         }
     }
 
     if (!plan_valid_) {
-        ROS_WARN("[DubinsPlanner] All top 3 candidates collided!");
+        ROS_WARN("[DubinsPlanner] All candidates collided!");
         // Optionally, assign the first candidate to current_path_ just for debug visualization (in RED)
         current_path_ = candidates[0]; 
     }
@@ -91,8 +101,6 @@ bool DubinsPlanner::planPath(double start_x, double start_y, double start_th,
     if (debug_viz) publishDebugViz(current_path_, plan_valid_);
     return plan_valid_;             // Return whether a valid plan was found
 }
-
-
 
 // Initialize execution state 
 void DubinsPlanner::startExecution(double velocity) {
@@ -108,7 +116,6 @@ void DubinsPlanner::startExecution(double velocity) {
 }
 
 // Stop execution
-// TODO: Maybe need negative velocity to stop istanly, now it seem like go after the stop for inertia
 void DubinsPlanner::stop() {
     is_executing_ = false;
     // Send zero-velocity command
@@ -148,7 +155,7 @@ bool DubinsPlanner::spin(double curr_x, double curr_y, double curr_th) {
         s_local = std::abs(delta_angle * R);
     }
 
-    // Segment switching
+    // Segment switching with tolerance
     if (s_local >= (active_seg.length - 0.05)) {
         if (current_segment_index_ < 2) {
             current_segment_index_++;
@@ -163,20 +170,14 @@ bool DubinsPlanner::spin(double curr_x, double curr_y, double curr_th) {
     return false;
 }
 
-
 void DubinsPlanner::publishReference(const Kinematics::Segment& seg, double s_local) {
     
     Kinematics::State ref_state;
     Kinematics::DubinsSolver::project_state(s_local, seg.start_x, seg.start_y, seg.start_heading, seg.curvature, ref_state);
 
-    // ENHANCED ERROR CHECKING
+    // Error Checking for NaNs
     if (std::isnan(ref_state.x) || std::isnan(ref_state.y) || std::isnan(ref_state.yaw)) {
-        ROS_ERROR("[DubinsPlanner] === NaN DETECTED IN REFERENCE ===");
-        ROS_ERROR("[DubinsPlanner]   Segment: %d/3", current_segment_index_);
-        ROS_ERROR("[DubinsPlanner]   Arc Start: (%.3f, %.3f, %.3f rad)", seg.start_x, seg.start_y, seg.start_heading);
-        ROS_ERROR("[DubinsPlanner]   Arc Params: k=%.6f, length=%.3f m", seg.curvature, seg.length);
-        ROS_ERROR("[DubinsPlanner]   Local Progress: s=%.3f / %.3f m", s_local, seg.length);
-        
+        ROS_ERROR("[DubinsPlanner] NaN detected in reference projection. Stopping.");
         stop(); 
         return;
     }
@@ -186,12 +187,11 @@ void DubinsPlanner::publishReference(const Kinematics::Segment& seg, double s_lo
     ref_msg.y_d = ref_state.y;
     ref_msg.theta_d = ref_state.yaw;
     ref_msg.v_d = target_velocity_;
-    ref_msg.omega_d = seg.curvature * target_velocity_; // Velocità angolare = curvatura * velocità lineare
+    ref_msg.omega_d = seg.curvature * target_velocity_; 
     ref_msg.plan_finished = false;
 
     pub_ref_.publish(ref_msg);
 }
-
 
 // Debug Visualization on RViz
 void DubinsPlanner::publishDebugViz(const Kinematics::Trajectory& trajectory, bool valid) {
@@ -209,7 +209,6 @@ void DubinsPlanner::publishDebugViz(const Kinematics::Trajectory& trajectory, bo
     if (valid) { m.color.g = 1.0; m.color.a = 1.0; } 
     else       { m.color.r = 1.0; m.color.a = 1.0; }
 
-    // Lambda aggiornata per usare Kinematics::Segment e project_state
     auto add_segment_points = [&](const Kinematics::Segment& seg) {
         double step = 0.1;
         int n = std::ceil(seg.length / step);
@@ -225,7 +224,6 @@ void DubinsPlanner::publishDebugViz(const Kinematics::Trajectory& trajectory, bo
         }
     };
 
-    // Iteriamo sui 3 segmenti della traiettoria
     for (const auto& seg : trajectory.segments) {
         add_segment_points(seg);
     }

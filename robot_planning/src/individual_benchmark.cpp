@@ -5,8 +5,9 @@
 
 #include "mission_manager.h"
 
-const std::string OUTPUT_DIR = "src/robot_planning/src/test/";
-const std::string METRICS_FILENAME = "benchmark_results_2.txt";
+//const std::string OUTPUT_DIR = "src/robot_planning/src/test/";
+const std::string OUTPUT_DIR = "src/robot_planning/robot_planning/src/test/";
+const std::string METRICS_FILENAME = "benchmark_results.txt";
 
 void appendMetricsToFile(const std::string& filepath, const RunMetrics& m) {
     std::ofstream file;

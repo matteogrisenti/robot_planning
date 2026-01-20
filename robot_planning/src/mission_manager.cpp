@@ -62,50 +62,46 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
         ROS_INFO("[MissionManager] Started mission with planner '%s' and time limit %.1f s", planner_type.c_str(), time_limit);
         
         // --- PHASE 1: ENVIRONMENT MODELING & ROADMAP ---
-        // 1.1 Build the physical map (obstacles, victims, gates).
         map_builder::MapBuilder builder(nh_, 1000.0);
         ROS_INFO("[MissionManager] Building Map...");
         Map map = builder.buildMap();
 
-        // 1.2 Generate the Roadmap using the selected algorithm.
         ros::Time t_start_roadmap = ros::Time::now();
         std::shared_ptr<Roadmap> roadmap = generateRoadmap(planner_type, map);
         if (!roadmap) throw std::runtime_error("[MissionManager] Roadmap generation failed.");
         
-        // 1.3 Integration: Connect Start, Gate and Victims coordinates into the discrete roadmap graph.
-        // // 1.3.1 Start
+        // Integrate Start
         PlanningUtils::integratePosition(roadmap, startPose, map.obstacles.get_obstacles(), "Start");
-        // // 1.3.2 Gate
+        
+        // Integrate Gate
         Vertex gatePose(0,0);
         if (!map.gates.get_gates().empty()) {
             Point g = map.gates.get_gates()[0].get_position();
             gatePose = Vertex(g.x, g.y);
             PlanningUtils::integratePosition(roadmap, gatePose, map.obstacles.get_obstacles(), "Gate");
         }
-        // // 1.3.3 Victims + Score Map
-        std::vector<Victim> victims = map.victims.get_victims();    // Vector of the Victim objects
-        std::map<int, double> victim_score_map;                     // Map of Victims Scores by Roadmap Index
+        
+        // Integrate Victims & Build Score Map
+        std::vector<Victim> victims = map.victims.get_victims();    
+        std::map<int, double> victim_score_map;                     
         
         for(size_t i=0; i<victims.size(); ++i) {
             Point center = victims[i].get_center();
             PlanningUtils::integratePosition(roadmap, Vertex(center.x, center.y), map.obstacles.get_obstacles(), "Victim " + std::to_string(i));
             
-            // Score Lookup
             Victim v = victims[i];
             int idx = GraphSearch::TaskPlanner::getNearestNodeIdx(*roadmap, Vertex(Vertex(v.get_center().x, v.get_center().y)));
-            if (idx != -1) victim_score_map[idx] = v.get_radius(); // Using radius as score proxy based on original code
+            if (idx != -1) victim_score_map[idx] = v.get_radius(); 
         }
-        
-        // -- RECORD TIME: timer for Roadmap Generation
         metrics.t_roadmap = (ros::Time::now() - t_start_roadmap).toSec();
 
 
         // --- PHASE 2: TASK PLANNING ---
-        ros::Time t_start_plan = ros::Time::now();  // Timer for total planning (Task + Graph)
-        ROS_INFO("[MissionManager] Planning Mission Sequence (Time Budget: %.1f s)...", time_limit);
+        ros::Time t_start_plan = ros::Time::now(); 
+        ROS_INFO("[MissionManager] Planning Mission Sequence...");
         
-        // Use a conservative velocity (85% of max) to account for time lost during turns.
-        double conservative_velocity = ROBOT_VELOCITY * 0.85;
+        // Use a slightly conservative velocity for planning estimates
+        double conservative_velocity = ROBOT_VELOCITY * 0.75;
         std::vector<int> missionSequence = GraphSearch::TaskPlanner::planMissionSequence(
             *roadmap, startPose, victims, gatePose, time_limit, conservative_velocity
         );
@@ -114,7 +110,6 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
 
 
         // --- PHASE 3: PATH FINDING ---
-        // Generates the detailed node-by-node path including optimization
         std::vector<int> fullGlobalPath = GraphSearch::GraphPlanner::computeFullTrajectory(
             *roadmap, 
             missionSequence, 
@@ -123,10 +118,10 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
 
         if (fullGlobalPath.empty()) throw std::runtime_error("[MissionManager] Final Global Path is empty.");
 
-        // Visualizzazione Debug Rviz
+        // Debug Visualization
         GraphSearch::rviz_plan(fullGlobalPath, *roadmap, debug_pub_);
 
-        // Save a visual PNG snapshot of the final plan for the benchmark report.
+        // Save Snapshot
         try {
             roadmap_viz::RoadmapVisualizer viz;
             viz.render(map, *roadmap);
@@ -136,9 +131,7 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
             viz.saveToFile(ss.str());
         } catch (...) { ROS_WARN("[MissionManager] Visualization save failed."); }
 
-        // -- RECORD TIME: timer for total planning (Task + Graph)
         metrics.t_total_planning = (ros::Time::now() - t_start_plan).toSec();
-
 
 
         // --- PHASE 4: REAL-TIME EXECUTION ---
@@ -146,8 +139,9 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
         ros::Time t_start_exec = ros::Time::now();
         bool mission_failed = false;
 
-        // Determine critical nodes for execution phase logic
-        std::set<int> criticalNodes(missionSequence.begin(), missionSequence.end());
+        // Tracks the current target in the mission sequence.
+        // missionSequence[0] is Start, so the first real target is at index 1.
+        size_t currentTargetSeqIdx = 1;
 
         for (size_t i = 0; i < fullGlobalPath.size() - 1; ++i) {
             int currentIdx = fullGlobalPath[i];
@@ -155,56 +149,71 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
             const Vertex& currentV = roadmap->getVertex(currentIdx);
             const Vertex& targetV = roadmap->getVertex(nextIdx);
 
-            // Determine if the next node requires a specific heading (theta)
-            bool isCritical = (criticalNodes.find(nextIdx) != criticalNodes.end());
+            // Determine if the next node is a Key Mission Target (Victim or Gate)
+            // This prevents the robot from stopping at intermediate path nodes.
+            bool isCurrentMissionTarget = (currentTargetSeqIdx < missionSequence.size() && 
+                                           nextIdx == missionSequence[currentTargetSeqIdx]);
+            
+            // Check if it is the absolute final Gate
+            bool isFinalGate = (isCurrentMissionTarget && currentTargetSeqIdx == missionSequence.size() - 1);
+
+            // --- HEADING OPTIMIZATION (Prevent Loops) ---
             double goal_theta = 0.0;
             double approach_angle = std::atan2(targetV.y - currentV.y, targetV.x - currentV.x);
 
-            // Smooth heading: if next turn is shallow, point toward the exit of the node instead.
-            if (!isCritical && i + 2 < fullGlobalPath.size()) {
+            // Logic: If we are NOT at the target yet, look ahead to the NEXT node to smooth the turn.
+            // BUT: If the next node is too close, don't force it (it causes loops).
+            if (!isCurrentMissionTarget && i + 2 < fullGlobalPath.size()) {
                 const Vertex& futureV = roadmap->getVertex(fullGlobalPath[i+2]);
-                double exit_angle = std::atan2(futureV.y - targetV.y, futureV.x - targetV.x);
-                if (std::abs(normalizeAngle(exit_angle - approach_angle)) <= (M_PI/3.0)) 
-                    goal_theta = exit_angle;
-                else goal_theta = approach_angle;
+                double dist_to_future = std::hypot(futureV.x - targetV.x, futureV.y - targetV.y);
+                
+                // Only optimize heading if there is enough space (> 2.0m)
+                if (dist_to_future > 2.0) {
+                    double exit_angle = std::atan2(futureV.y - targetV.y, futureV.x - targetV.x);
+                    // Only smooth if the angle change is reasonable (< 60 degrees)
+                    if (std::abs(normalizeAngle(exit_angle - approach_angle)) <= (M_PI/3.0)) 
+                        goal_theta = exit_angle;
+                    else 
+                        goal_theta = approach_angle;
+                } else {
+                    goal_theta = approach_angle;
+                }
             } else {
                 goal_theta = approach_angle;
             }
 
-            // --- NAVIGATION LOOP WITH STALL DETECTION ---
-            bool already_at_target = false;
-            if (isCritical) {
-                double dist_to_target = 0.0;
-                {
-                    std::lock_guard<std::mutex> lock(odom_mutex_);
-                    dist_to_target = std::hypot(targetV.x - current_pose_odom_.x, targetV.y - current_pose_odom_.y);
-                }
-                if (dist_to_target < 0.50) already_at_target = true;
-            }
 
+            // --- NAVIGATION LOOP (CONSTANT VELOCITY) ---
             int retry_count = 0;
-            int current_max_retries = isCritical ? MAX_DUBINS_RETRIES : 1;
-            bool node_success = already_at_target;
+            // Retry more aggressively only for actual targets
+            int current_max_retries = isCurrentMissionTarget ? MAX_DUBINS_RETRIES : 1;
+            bool node_success = false;
 
             while (!node_success && retry_count <= current_max_retries) {
-                double v_cmd = (retry_count == 0) ? ROBOT_VELOCITY : (ROBOT_VELOCITY * 0.6); 
+                // FORCE CONSTANT VELOCITY: Always send ROBOT_VELOCITY
+                double v_cmd = ROBOT_VELOCITY;
+                
+                // Only stop/reset planner if we are stuck in a retry loop
+                if (retry_count > 0) v_cmd = ROBOT_VELOCITY * 0.8; 
+
                 dubins_client_->sendGoal(targetV.x, targetV.y, goal_theta, v_cmd, TURNING_RADIUS);
                 
-                ros::Rate loop_rate(5); 
+                ros::Rate loop_rate(10); 
                 ros::Time stall_start_time = ros::Time::now();
                 ros::Time segment_start_time = ros::Time::now(); 
 
                 while(ros::ok()) {
-                    if (dubins_client_->waitForResult(0.01)) { 
+                    if (dubins_client_->waitForResult(0.05)) { 
                         if (dubins_client_->isSuccess()) node_success = true;
                         break;
                     }
 
+                    // Stall Detection
                     double v_now = 0.0;
                     { std::lock_guard<std::mutex> lock(odom_mutex_); v_now = current_speed_; }
 
-                    if (ros::Time::now() - segment_start_time > ros::Duration(2.0)) { 
-                        if (v_now > 0.02) stall_start_time = ros::Time::now();
+                    if (ros::Time::now() - segment_start_time > ros::Duration(1.0)) { 
+                        if (v_now > 0.05) stall_start_time = ros::Time::now();
                         else if (ros::Time::now() - stall_start_time > ros::Duration(3.0)) {
                             ROS_WARN("[MissionManager] STALL DETECTED node %d", nextIdx);
                             break; 
@@ -214,24 +223,43 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
                 }
 
                 if (node_success) break;
+                
                 retry_count++;
                 metrics.dubins_retries++;
-                if (retry_count <= current_max_retries) ros::Duration(0.5).sleep();
+                // Small pause only on failure to let planner reset
+                if (retry_count <= current_max_retries) ros::Duration(0.1).sleep();
             }
 
             if (!node_success) {
-                if (isCritical) {
-                    ROS_ERROR("[MissionManager] CRITICAL FAILURE at Node %d. Mission Aborted.", nextIdx);
+                if (isCurrentMissionTarget) {
+                    ROS_ERROR("[MissionManager] CRITICAL FAILURE at Target Node %d. Aborting.", nextIdx);
                     mission_failed = true;
                     break; 
                 }
-            } else if (isCritical && !already_at_target) {
-                if (i != fullGlobalPath.size() - 2) {
-                    metrics.victims_collected++;
-                    if (victim_score_map.count(nextIdx)) metrics.total_score += victim_score_map[nextIdx];
+            } else {
+                // --- SUCCESS LOGIC ---
+                if (isCurrentMissionTarget) {
+                    
+                    // 1. COLLECT SCORE (No Stop)
+                    if (!isFinalGate) {
+                        metrics.victims_collected++;
+                        if (victim_score_map.count(nextIdx)) {
+                            metrics.total_score += victim_score_map[nextIdx];
+                            ROS_INFO("[MissionManager] Victim Collected at Node %d. Score: %.1f", nextIdx, metrics.total_score);
+                        }
+                    }
+
+                    // 2. ADVANCE TARGET
+                    currentTargetSeqIdx++;
+
+                    // 3. STOP ONLY IF FINAL GATE
+                    if (isFinalGate) {
+                        ROS_INFO("[MissionManager] Final Gate Reached. Mission Complete.");
+                        dubins_client_->sendGoal(targetV.x, targetV.y, goal_theta, 0.0, TURNING_RADIUS);
+                        ros::Duration(1.0).sleep();
+                    }
+                    // Else: Continue immediately to next node without stopping
                 }
-                dubins_client_->sendGoal(targetV.x, targetV.y, goal_theta, 0.0, TURNING_RADIUS);
-                ros::Duration(1.0).sleep();
             }
         }
 
