@@ -8,9 +8,9 @@
 namespace sample_planning {
 
     struct PRMConfig {
-        int num_samples = 500;      // N nella slide
-        int k_neighbors = 10;       // K nella slide
-        double max_connection_dist = -1.0; // Opzionale: limita la lunghezza massima degli edge
+        int num_samples = 500;      
+        int k_neighbors = 10;       
+        double max_connection_dist = -1.0; 
     };
 
     /**

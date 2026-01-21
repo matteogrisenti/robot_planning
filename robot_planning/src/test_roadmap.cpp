@@ -3,18 +3,14 @@
 #include <string>
 #include <iostream>
 
-// Infrastruttura Mappa e Roadmap
+
 #include "map_library.h"
 #include "libraries/roadmap.h"
-
-// Algoritmi Combinatoriali
 #include "libraries/combinatorial_planning.h"
-// Algoritmi Sample-Based
 #include "libraries/sample_based_planning.h"
 
 int main(int argc, char **argv)
 {
-    // 1. Inizializzazione ROS
     ros::init(argc, argv, "test_roadmap_unified");
     ros::NodeHandle nh;
 
@@ -22,26 +18,22 @@ int main(int argc, char **argv)
 
     try {
         // ---------------------------------------------------------
-        // A. BUILD ENVIRONMENT (Map) - Eseguito una sola volta
+        // A. BUILD ENVIRONMENT 
         // ---------------------------------------------------------
         ROS_INFO("1. Waiting for Map Data...");
         map_builder::MapBuilder builder(nh, 1000.0);
         Map map = builder.buildMap();
 
-        // Percorsi di output basati sui file originali 
-        //std::string combinatorial_base_path = "src/robot_planning/src/libraries/combinatorial_planning/test/";
-        //std::string sample_base_path = "src/robot_planning/src/libraries/sample_based_planning/test/";
         std::string combinatorial_base_path = "src/robot_planning/robot_planning/src/libraries/combinatorial_planning/test/";
         std::string sample_base_path = "src/robot_planning/robot_planning/src/libraries/sample_based_planning/test/";
 
         ROS_INFO("Map built successfully.");
         
-        // Salvataggio immagine mappa pulita per entrambi i gruppi (opzionale, salviamo nelle rispettive cartelle)
         map.plot(false, true, combinatorial_base_path + "map.png");
         map.plot(false, true, sample_base_path + "map.png");
 
         // =========================================================
-        // SEZIONE 1: COMBINATORIAL PLANNING
+        // SECTION 1: COMBINATORIAL PLANNING
         // =========================================================
         ROS_INFO("\n=== SECTION 1: COMBINATORIAL PLANNING ALGORITHMS ===");
 
@@ -90,7 +82,7 @@ int main(int argc, char **argv)
         // Test 1.4: Shortest Path Roadmap
         {
             ROS_INFO("--- Test 1.4: Shortest Path Roadmap ---");
-            double padding = 0.1; // Padding di 0.1 unità
+            double padding = 0.1; 
             std::shared_ptr<Roadmap> SPR_roadmap = shortestPathRoadmap(map, padding);
 
             if (SPR_roadmap) {
@@ -103,7 +95,7 @@ int main(int argc, char **argv)
         }
 
         // =========================================================
-        // SEZIONE 2: SAMPLE-BASED PLANNING
+        // SECTION 2: SAMPLE-BASED PLANNING
         // =========================================================
         ROS_INFO("\n=== SECTION 2: SAMPLE-BASED PLANNING ALGORITHMS ===");
 
@@ -153,8 +145,8 @@ int main(int argc, char **argv)
             ROS_INFO("--- Test 2.3: RRT* ---");
             sample_planning::RRTStarConfig config;
             config.max_iterations = 2000;
-            config.step_size = 0.4; // Equal to TURNING_RADIUS of the robot
-            config.search_radius = 1.2; // 2x or 3x of step_size
+            config.step_size = 0.4; 
+            config.search_radius = 1.2; 
 
             if (!map.gates.get_gates().empty()) {
                 Point g = map.gates.get_gates()[0].get_position();

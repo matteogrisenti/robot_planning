@@ -8,9 +8,6 @@
 #include "map_library/map_builder.h"
 #include "robot_control/Reference.h"
 
-// REMOVED: Legacy global variables (dubinscurve_out, point, etc.)
-// These are now handled internally by the DubinsPlanner class.
-
 class ControlTestNode {
 private:
     ros::NodeHandle nh_;
@@ -152,6 +149,7 @@ public:
     }
 
     void update() {
+        ros::spinOnce();
         if (plan_started_) {
             planner_.spin(robot_x_, robot_y_, robot_theta_);
         }

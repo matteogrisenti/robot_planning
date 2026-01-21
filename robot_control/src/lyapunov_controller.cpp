@@ -45,27 +45,12 @@ std::pair<double, double> LyapunovController::controlUnicycle(
     double e_y_body = -s * ex_w + c * ey_w;
 
     // 3. CONTROL LAW APPLICATION
-    
-    // --- LINEAR VELOCITY CONTROL (Modified for Constant Velocity) ---
-    // Standard Lyapunov would be: v_cmd = v_d * cos(e_theta) + K_P * e_x_body;
-    // This causes the robot to slow down significantly on turns or when orientation error exists.
-    //
-    // FIX: To satisfy the "Constant Velocity" assumption, we push v_d directly.
-    // We only stop if the orientation error is extreme (> 90 deg) to prevent moving backwards blind.
-    
     double ctrl_v = v_d; 
     
-    // Safety check: if we are facing the wrong way (>90 deg error), stop to turn in place (or wait for omega to fix it).
-    // This usually shouldn't happen with a good Dubins planner.
     if (std::abs(e_theta) > M_PI_2) {
         ctrl_v = 0.0; 
     }
 
-    // --- ANGULAR VELOCITY CONTROL (Standard Lyapunov) ---
-    // This part remains active to steer the robot towards the path.
-    // omega = omega_d + K_theta * sin(e_theta) + K_y * e_y * sinc(e_theta)
-    // We use a simplified form where K_P acts on the lateral error.
-    
     double ctrl_omega = omega_d + params_.K_THETA * sin(e_theta) + params_.K_P * e_y_body;
 
     if (verbose) {

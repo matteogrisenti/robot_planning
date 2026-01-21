@@ -122,14 +122,14 @@ add_library(mission_manager_lib
   src/mission_manager.cpp
 )
 target_link_libraries(mission_manager_lib
-  planning_utils_lib         # Per PlanningUtils
-  roadmap_lib                # Per Roadmap
-  roadmap_factory_lib        # Per generateRoadmap
-  graph_search_lib           # Per AStar e TaskPlanner
-  map_library                # Per MapBuilder
-  dubins_client_library      # Per DubinsClient
-  sample_planning_lib        # Necessarie se incluse indirettamente
-  combinatorial_planning_lib # Necessarie se incluse indirettamente
+  planning_utils_lib        
+  roadmap_lib               
+  roadmap_factory_lib       
+  graph_search_lib          
+  map_library               
+  dubins_client_library     
+  sample_planning_lib       
+  combinatorial_planning_lib
 )
 
 # ==============================================================================
@@ -179,37 +179,9 @@ target_link_libraries(graph_search_test_node
 )
 add_dependencies(graph_search_test_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
-# --- Complete Planning Pipeline Node ---
-# add_executable(complete_planning_pipeline_node src/complete_planning_pipeline.cpp)
-# target_link_libraries(complete_planning_pipeline_node
-#   graph_search_lib
-#   sample_planning_lib
-#   combinatorial_planning_lib 
-#   roadmap_lib
-#   roadmap_factory_lib
-#   dubins_client_library
-#   ${catkin_LIBRARIES}
-#   ${OpenCV_LIBRARIES}
-# )
-# add_dependencies(complete_planning_pipeline_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-
 
 add_executable(individual_benchmark_node src/individual_benchmark.cpp)
 target_link_libraries(individual_benchmark_node
   ${catkin_LIBRARIES}
   mission_manager_lib        
 )
-
-
-# add_executable(benchmark_node src/benchmark_pipeline.cpp)
-# target_link_libraries(benchmark_node
-#   ${catkin_LIBRARIES}
-#   planning_utils_lib         # Per PlanningUtils
-#   roadmap_lib                # Per Roadmap
-#   roadmap_factory_lib        # Per generateRoadmap
-#   graph_search_lib           # Per AStar e TaskPlanner
-#   map_library                # Per MapBuilder
-#   dubins_client_library      # Per DubinsClient
-#   sample_planning_lib        # Necessarie se incluse indirettamente
-#   combinatorial_planning_lib # Necessarie se incluse indirettamente
-# )

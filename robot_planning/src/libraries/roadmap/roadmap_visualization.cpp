@@ -12,7 +12,6 @@ namespace roadmap_viz {
     void RoadmapVisualizer::calculateBounds(const Map& map) {
         bounds_.points_found = false;
         
-        // Inizializza con i bordi se presenti
         if (!map.borders.get_points().empty()) {
             bounds_.min_x = bounds_.max_x = static_cast<float>(map.borders.get_points()[0].x);
             bounds_.min_y = bounds_.max_y = static_cast<float>(map.borders.get_points()[0].y);
@@ -37,7 +36,7 @@ namespace roadmap_viz {
             for (const auto& p : obs.get_points()) update_bounds(p.x, p.y);
         }
         
-        // Considera anche Vittime e Gate per il bounds (importante se sono fuori dai bordi per errore)
+        
         for (const auto& v : map.victims.get_victims()) update_bounds(v.get_center().x, v.get_center().y);
         for (const auto& g : map.gates.get_gates()) update_bounds(g.get_position().x, g.get_position().y);
 
@@ -46,7 +45,6 @@ namespace roadmap_viz {
             bounds_.max_x = bounds_.max_y = 10.0f;
         }
         
-        // Calcolo scala con margini
         float world_width = bounds_.max_x - bounds_.min_x;
         float world_height = bounds_.max_y - bounds_.min_y;
         if (world_width <= 0) world_width = 1.0f;
@@ -73,8 +71,6 @@ namespace roadmap_viz {
                         1.0f - 2.0f * (q.y * q.y + q.z * q.z));
     }
 
-    // --- DISEGNO ELEMENTI MAPPA ---
-
     void RoadmapVisualizer::drawBorders(const Borders& borders) {
         if (borders.get_points().size() < 2) return;
         std::vector<cv::Point> points;
@@ -100,15 +96,12 @@ namespace roadmap_viz {
         for (const auto& v : victims.get_victims()) {
             cv::Point center = worldToImage(v.get_center().x, v.get_center().y);
             
-            // Raggio approssimativo (clamped per visibilità)
-            float r_meters = v.get_radius() / 1000.0f; // Assumendo raggio in mm nel msg originale
+            float r_meters = v.get_radius() / 1000.0f; 
             int r_px = static_cast<int>(r_meters * bounds_.scale);
-            int final_r = std::max(10, std::min(r_px, 100)); // Min 10px, Max 100px
+            int final_r = std::max(10, std::min(r_px, 100));
             
             cv::circle(canvas_, center, final_r, config_.color_victim_fill, -1);
             cv::circle(canvas_, center, final_r, config_.color_victim_outline, 2);
-            
-            // Label "V"
             cv::putText(canvas_, "V", cv::Point(center.x - 5, center.y + 5), 
                         cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255,255,255), 2);
         }
@@ -119,23 +112,17 @@ namespace roadmap_viz {
             cv::Point pos = worldToImage(gate.get_position().x, gate.get_position().y);
             float yaw = quaternionToYaw(gate.get_orientation());
             
-            // Calcola fine della freccia (nota: asse Y immagine è invertito rispetto al mondo, quindi -sin)
             cv::Point arrow_end(
                 pos.x + static_cast<int>(config_.gate_arrow_length * std::cos(yaw)),
                 pos.y - static_cast<int>(config_.gate_arrow_length * std::sin(yaw))
             );
             
-            // Disegna freccia e punto base
             cv::arrowedLine(canvas_, pos, arrow_end, config_.color_gate, 3, cv::LINE_AA, 0, 0.3);
             cv::circle(canvas_, pos, 6, config_.color_gate, -1);
-            
-            // Label "GATE"
             cv::putText(canvas_, "GATE", cv::Point(pos.x + 10, pos.y), 
                         cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0,100,0), 1);
         }
     }
-
-    // --- DISEGNO ROADMAP ---
 
     void RoadmapVisualizer::drawTrapezoids(const Roadmap& roadmap) {
         if (!roadmap.debugTrapezoids) return;
@@ -184,23 +171,18 @@ namespace roadmap_viz {
         cv::putText(canvas_, info, cv::Point(20, 30), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0,0,0), 2);
     }
 
-    // --- RENDER & PATH ---
-
     void RoadmapVisualizer::render(const Map& map, const Roadmap& roadmap) {
         canvas_ = cv::Mat(config_.img_height, config_.img_width, CV_8UC3, config_.color_background);
         calculateBounds(map);
         
-        // Layer 1: Mappa Base
         drawBorders(map.borders);
         drawObstacles(map.obstacles);
-        drawVictims(map.victims);  // <--- Vittime
-        drawGates(map.gates);      // <--- Gate
+        drawVictims(map.victims);  
+        drawGates(map.gates);      
         
-        // Layer 2: Debug (Trapezi/Celle)
         drawTrapezoids(roadmap);
         drawCells(roadmap);
         
-        // Layer 3: Grafo
         drawRoadmapEdges(roadmap);
         drawRoadmapVertices(roadmap);
         
@@ -210,7 +192,7 @@ namespace roadmap_viz {
     void RoadmapVisualizer::drawPath(const Roadmap& roadmap, const std::vector<int>& path) {
         if (path.size() < 2) return;
         
-        cv::Scalar pathColor(0, 0, 255); // Rosso
+        cv::Scalar pathColor(0, 0, 255); 
         int thickness = 4;
         
         for (size_t i = 0; i < path.size() - 1; ++i) {
@@ -222,9 +204,8 @@ namespace roadmap_viz {
             cv::Point p2 = vertexToImage(roadmap.getVertex(v));
             
             cv::line(canvas_, p1, p2, pathColor, thickness, cv::LINE_AA);
-            cv::circle(canvas_, p1, 4, pathColor, -1); // Waypoint
+            cv::circle(canvas_, p1, 4, pathColor, -1); 
         }
-        // Ultimo punto
         if (!path.empty()) {
             cv::circle(canvas_, vertexToImage(roadmap.getVertex(path.back())), 6, pathColor, -1);
         }

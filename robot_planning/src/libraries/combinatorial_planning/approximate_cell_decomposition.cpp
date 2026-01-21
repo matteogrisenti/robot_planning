@@ -12,12 +12,9 @@ namespace HelperAproximateCellDecomposition {
                                 int depth, int maxDepth, double minCellSize, 
                                 std::vector<Cell>& freeCells,
                                 const std::vector<Point>& targets);
-    
-    // Altre forward declaration corrette
     bool cellIntersectsObstacle(const Cell& cell, const Map& map);
     bool cellOutsideCheck(const Cell& cell, const Map& map);
     Vertex calculateRefinedCentroid(const Cell& cell, const Map& map);
-    // Firma corretta per accettare la mappa dei nodi validi
     void connectAdjacentCells(const std::vector<Cell>& cells, std::shared_ptr<Roadmap> roadmap, const std::vector<int>& mapping);
 }
 
@@ -27,7 +24,7 @@ std::shared_ptr<Roadmap> approximateCellDecomposition(const Map& map, int maxDep
     roadmap->setMap(&map);
     std::vector<Cell> freeCells;
 
-    // --- 0. PREPARAZIONE TARGETS ---
+    // 0. Prepare targets
     std::vector<Point> targets;
     if (!map.gates.get_gates().empty()) {
         targets.push_back(map.gates.get_gates()[0].get_position());
@@ -47,12 +44,12 @@ std::shared_ptr<Roadmap> approximateCellDecomposition(const Map& map, int maxDep
 
     // 3. Convert Free Cells to Roadmap Nodes
     std::vector<int> cellIndexToNodeId(freeCells.size(), -1);
-    double safety_margin = 0.35; // Margine di sicurezza
+    double safety_margin = 0.35; // Safety margin
 
     for (size_t i = 0; i < freeCells.size(); ++i) {
         Vertex nodePos = HelperAproximateCellDecomposition::calculateRefinedCentroid(freeCells[i], map);
         
-        // Sovrapposizione Target
+        // Target Overlap
         for (const auto& t : targets) {
             if (freeCells[i].contains(Vertex(t.x, t.y))) {
                 nodePos = Vertex(t.x, t.y);
@@ -60,13 +57,13 @@ std::shared_ptr<Roadmap> approximateCellDecomposition(const Map& map, int maxDep
             }
         }
 
-        // QUI IL CHECK DI SICUREZZA (Correttamente posizionato)
+        // Check Safety
         if (PlanningUtils::isPointValid(nodePos.x, nodePos.y, map, safety_margin)) {
             cellIndexToNodeId[i] = roadmap->addVertex(nodePos);
         }
     }
 
-    // 4. Connect Adjacent Cells (passando la mapping)
+    // 4. Connect Adjacent Cells 
     HelperAproximateCellDecomposition::connectAdjacentCells(freeCells, roadmap, cellIndexToNodeId);
 
     return roadmap;
@@ -182,10 +179,10 @@ namespace HelperAproximateCellDecomposition {
     void connectAdjacentCells(const std::vector<Cell>& cells, std::shared_ptr<Roadmap> roadmap, const std::vector<int>& mapping) {
         double eps = 1e-4;
         for (size_t i = 0; i < cells.size(); ++i) {
-            if (mapping[i] == -1) continue; // SKIP NODI INVALIDI
+            if (mapping[i] == -1) continue; // Skip not valid nodes
 
             for (size_t j = i + 1; j < cells.size(); ++j) {
-                if (mapping[j] == -1) continue; // SKIP NODI INVALIDI
+                if (mapping[j] == -1) continue; // Skip not valid nodes
 
                 const Cell& c1 = cells[i];
                 const Cell& c2 = cells[j];

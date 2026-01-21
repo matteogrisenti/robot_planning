@@ -8,11 +8,8 @@
 #include <memory>
 #include <limits>
 #include <algorithm>
-
-// Boost.Polygon headers
 #include <boost/polygon/voronoi.hpp>
 
-// BOOST.POLYGON TRAITS SPECIALIZATION
 namespace boost {
 namespace polygon {
 
@@ -57,11 +54,10 @@ std::shared_ptr<Roadmap> maximumClearanceRoadmap(const Map& map) {
     boost::polygon::voronoi_diagram<double> vd;
     boost::polygon::construct_voronoi(segments.begin(), segments.end(), &vd);
 
-    // --- 3. CONVERSIONE DENSA (Sampling) ---
-    // Invece di mappare 1:1 i vertici Voronoi, creiamo nodi intermedi sugli archi lunghi.
-    double sampling_density = 0.25; // Un nodo ogni 0.5 metri
+    // 3. Dense Conversion (Sampling)
+    double sampling_density = 0.25; 
 
-    // Funzione helper per trovare o creare nodi (evita duplicati vicini)
+    // Helper function to find or create nodes (avoids nearby duplicates)
     auto get_or_create_node = [&](double x, double y) {
         for(int i=0; i<roadmap->getNumVertices(); ++i) {
             if (std::hypot(roadmap->getVertex(i).x - x, roadmap->getVertex(i).y - y) < 0.05) {
@@ -88,7 +84,7 @@ std::shared_ptr<Roadmap> maximumClearanceRoadmap(const Map& map) {
             bool safeEnd   = PlanningUtils::isPointValid(x1, y1, map, 0.5);
             if (safeStart && safeEnd) {
                 
-                // Calcola lunghezza e passi di campionamento
+                // Calculate length and sampling steps
                 double dist = std::hypot(x1 - x0, y1 - y0);
                 int steps = std::max(1, (int)(dist / sampling_density));
                 
@@ -107,7 +103,7 @@ std::shared_ptr<Roadmap> maximumClearanceRoadmap(const Map& map) {
         }
     }
 
-    // --- 4. AGGANCIO TARGET AL GRAFO DENSO ---
+    // 4. Attach targets to dense roadmap
     std::vector<Vertex> targets;
     if (!map.gates.get_gates().empty()) {
         Point g = map.gates.get_gates()[0].get_position();
@@ -121,22 +117,20 @@ std::shared_ptr<Roadmap> maximumClearanceRoadmap(const Map& map) {
     for (const auto& target : targets) {
         int targetNodeIdx = roadmap->addVertex(target);
 
-        // Collegati ai K nodi più vicini del grafo campionato
-        // Questo è robusto perché ora abbiamo nodi distribuiti ovunque lungo i percorsi sicuri
+        // Attach to K nearest nodes of the sampled roadmap
         std::vector<std::pair<double, int>> candidates;
         double search_radius = 5.0;
 
-        for (int i = 0; i < targetNodeIdx; ++i) { // Itera sui nodi esistenti
+        for (int i = 0; i < targetNodeIdx; ++i) { // Iterate over existing nodes
             double d = roadmap->getVertex(i).distance(target);
             if (d < search_radius) {
-                // Check collisione linea d'aria
                 if (!PlanningUtils::lineSegmentIntersectsObstacle(roadmap->getVertex(i), target, map.obstacles.get_obstacles())) {
                     candidates.push_back({d, i});
                 }
             }
         }
 
-        // Ordina e prendi i migliori 3 (o meno se non ce ne sono)
+        // Sort and take the best 3 (or less if there are none)
         std::sort(candidates.begin(), candidates.end());
         int k_conn = 3;
         for (int k = 0; k < std::min((int)candidates.size(), k_conn); ++k) {

@@ -21,14 +21,11 @@ int Roadmap::addVertex(const Vertex& p) {
     return vertices.size() - 1;
 }
 
-// METODO 1: Compatibilità Combinatorial (peso Euclideo calcolato auto)
 void Roadmap::addEdge(int from, int to, bool bidirectional){
     if (from >= vertices.size() || to >= vertices.size()) return;
     
-    // Calcola peso Euclideo
     double weight = vertices[from].distance(vertices[to]);
     
-    // Aggiungi edge con type -1 (default)
     adjacencyList[from].push_back(Edge(to, weight, -1));
     
     if (bidirectional) {
@@ -36,7 +33,6 @@ void Roadmap::addEdge(int from, int to, bool bidirectional){
     }
 }
 
-// METODO 2: Dubins / Sample Based (peso e tipo espliciti)
 void Roadmap::addEdge(int from, int to, double weight, bool bidirectional, int dubinsType) {
     if (from < 0 || from >= vertices.size() || to < 0 || to >= vertices.size()) return;
     
@@ -54,7 +50,6 @@ bool Roadmap::removeEdge(int from, int to, bool bidirectional) {
 
     bool found = false;
 
-    // 1. Rimuovi arco from -> to
     auto& edgesFrom = adjacencyList[from];
     auto it = std::remove_if(edgesFrom.begin(), edgesFrom.end(), 
                              [to](const Edge& e){ return e.targetVertex == to; });
@@ -64,14 +59,13 @@ bool Roadmap::removeEdge(int from, int to, bool bidirectional) {
         found = true;
     }
 
-    // 2. Rimuovi arco to -> from (se bidirezionale)
     if (bidirectional) {
         auto& edgesTo = adjacencyList[to];
         auto it2 = std::remove_if(edgesTo.begin(), edgesTo.end(), 
                                   [from](const Edge& e){ return e.targetVertex == from; });
         if (it2 != edgesTo.end()) {
             edgesTo.erase(it2, edgesTo.end());
-            found = true; // Consideriamo successo se ne troviamo almeno uno
+            found = true;
         }
     }
 
@@ -81,29 +75,23 @@ bool Roadmap::removeEdge(int from, int to, bool bidirectional) {
 void Roadmap::setMap(const Map* map_ptr) { this->linkedMap = map_ptr; }
 const Map* Roadmap::getMap() const { return this->linkedMap; }
 
-// Get number of vertices
 int Roadmap::getNumVertices() const {
     return vertices.size();
 }
-
-// Get vertex position
 const Vertex& Roadmap::getVertex(int idx) const {
     return vertices[idx];
 }
 
-// Get edges from a vertex
 const std::vector<Edge>& Roadmap::getEdges(int vertexIdx) const {
     return adjacencyList[vertexIdx];
 }
 
 
 void Roadmap::plot(bool display, bool save, std::string output_path) {
-    // Create visualizer with config
     roadmap_viz::RoadmapVizConfig viz_config;
-    viz_config.vertex_radius = 5; // Un po' più visibile
+    viz_config.vertex_radius = 5;
     roadmap_viz::RoadmapVisualizer viz(viz_config);
     
-    // Render
     if (this->linkedMap != nullptr) {
         viz.render(*this->linkedMap, *this);
     } else {

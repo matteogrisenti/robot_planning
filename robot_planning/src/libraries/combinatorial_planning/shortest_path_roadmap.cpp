@@ -21,13 +21,8 @@ std::shared_ptr<Roadmap> shortestPathRoadmap(const Map& map, const double paddin
     roadmap->setMap(&map);
 
     // 0. Pre-process Obstacles with Padding
-    // We create a local vector of obstacles. If padding > 0, these will be the inflated versions.
-    // If padding == 0, these are copies of the originals.
-    // We will use THIS vector for both Roadmap Vertices and Collision Checks.
     std::vector<Obstacle> effective_obstacles;
     
-    // We need to keep the point data alive if Obstacle stores pointers, 
-    // but the Obstacle struct in provided header copies points into a vector.
     for (const auto& obs : map.obstacles.get_obstacles()) {
         if (padding > EPSILON) {
             std::vector<Point> padded_pts = applyPaddingToPolygon(obs.get_points(), padding);
@@ -47,8 +42,6 @@ std::shared_ptr<Roadmap> shortestPathRoadmap(const Map& map, const double paddin
         int start_id = roadmap->getNumVertices();
 
         for (size_t i = 0; i < n; ++i) {
-            // The check is made only if padding is not zero 
-            // (in thisa case the point is guaranteed to be not valid)
             if(padding == 0 || PlanningUtils::isPointValid(pts[i].x, pts[i].y, map) == true) {
                 roadmap->addVertex(PlanningUtils::toVertex(pts[i]));
             }
@@ -91,7 +84,6 @@ std::shared_ptr<Roadmap> shortestPathRoadmap(const Map& map, const double paddin
         }
     }
 
-        // 2. Aggiungi esplicitamente Vittime e Gate come nodi
     for (const auto& v : map.victims.get_victims()) {
         roadmap->addVertex(Vertex(v.get_center().x, v.get_center().y));
     }
@@ -100,13 +92,8 @@ std::shared_ptr<Roadmap> shortestPathRoadmap(const Map& map, const double paddin
         roadmap->addVertex(Vertex(g.x, g.y));
     }
 
-    // 3. Loop di Visibilità (modificato per includere tutti i nodi appena aggiunti)
+    // 3. Visibility Graph
     int total_nodes = roadmap->getNumVertices();
-
-    // 3. Connect Visible Vertices (Bitangents)
-    // Iterate through all unique pairs of vertices to form the Visibility Graph.
-    // This connects any two vertices (u, v) if the line segment uv lies entirely in Free Space.
-
 
     // Prepare map border vertices once for efficiency in the loop
     std::vector<Vertex> map_border_vertices;

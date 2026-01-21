@@ -8,7 +8,7 @@
 
 namespace sample_planning {
 
-    // Helper: Steer (identico a RRT)
+    // Helper: Steer
     Vertex steer_s(const Vertex& from, const Vertex& to, double step_size) {
         double dist = from.distance(to);
         if (dist <= step_size) return to;
@@ -19,7 +19,7 @@ namespace sample_planning {
         );
     }
 
-    // Helper per trovare Nearest Neighbor (usato per l'aggancio finale)
+    // Helper: Nearest Neighbor
     int getNearestNeighborIdx_s(const Roadmap& r, const Vertex& q_rand) {
         int nearestIdx = -1;
         double min_dist = std::numeric_limits<double>::max();
@@ -30,7 +30,7 @@ namespace sample_planning {
         return nearestIdx;
     }
 
-    // Helper Connessione Finale
+    // Helper Final Connection
     void connectTargetToTree_s(Roadmap& roadmap, const Vertex& target, const std::vector<Obstacle>& obstacles) {
         int nearestIdx = getNearestNeighborIdx_s(roadmap, target);
         if (nearestIdx == -1) return;
@@ -70,7 +70,7 @@ namespace sample_planning {
         std::vector<Vertex> borderPoly;
         for(const auto& bp : map.borders.get_points()) borderPoly.push_back(Vertex(bp.x, bp.y));
 
-        // --- PREPARAZIONE GOAL BIASING ---
+        // --- GOAL BIASING ---
         std::vector<Vertex> targets;
         if (!map.gates.get_gates().empty()) {
             Point g = map.gates.get_gates()[0].get_position();
@@ -85,7 +85,7 @@ namespace sample_planning {
 
         for (int k = 0; k < config.max_iterations; ++k) {
             
-            // 2. Sampling (con Bias)
+            // 2. Sampling 
             Vertex q_rand;
             if (!targets.empty() && disBias(gen) < goal_bias_prob) {
                 int tIdx = std::rand() % targets.size();
@@ -152,20 +152,16 @@ namespace sample_planning {
                 const Vertex& x_near = roadmap->getVertex(x_near_idx);
                 double new_cost_via_q_new = tree_data[q_new_idx].cost + q_new.distance(x_near);
 
-                // Se passando per q_new il costo diminuisce...
                 if (new_cost_via_q_new < tree_data[x_near_idx].cost) {
                      if (!PlanningUtils::lineSegmentIntersectsObstacle(q_new, x_near, obstacles)) {
-                         
-                         // 1. RIMUOVI L'ARCO col vecchio genitore
+   
                          int old_parent = tree_data[x_near_idx].parent;
                          if (old_parent != -1) {
                              roadmap->removeEdge(old_parent, x_near_idx, true);
                          }
 
-                         // 2. AGGIUNGI L'ARCO col nuovo genitore (q_new)
                          roadmap->addEdge(q_new_idx, x_near_idx, true);
                          
-                         // 3. Aggiorna i dati interni
                          tree_data[x_near_idx].parent = q_new_idx;
                          tree_data[x_near_idx].cost = new_cost_via_q_new;
                      }
@@ -174,7 +170,7 @@ namespace sample_planning {
             // --- RRT* END ---
         }
         
-        // Connessione Finale Targets
+        // Final Connection
         ROS_INFO("[RRT*] Built optimized tree. Connecting Targets...");
         for (const auto& t : targets) {
             connectTargetToTree_s(*roadmap, t, obstacles);

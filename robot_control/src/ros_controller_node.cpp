@@ -1,5 +1,5 @@
 #include "robot_control/ros_controller_node.h" // .h library
-#include <cmath> // per std::isnan
+#include <cmath> 
 
 /* Implementation of the RosControllerNode class */
 // Constructor
@@ -64,10 +64,8 @@ void RosControllerNode::startController() {
             
             // --- SAFETY: NAN CHECK ---
             if (std::isnan(ctrl_v_) || std::isnan(ctrl_omega_) || std::isinf(ctrl_v_) || std::isinf(ctrl_omega_)) {
-                // Se riceviamo NaN (dal Dubins planner rotto), fermiamo il robot invece di mandare comandi invalidi
                 ctrl_v_ = 0.0;
                 ctrl_omega_ = 0.0;
-                // ROS_WARN_THROTTLE(1.0, "[Controller] NaN detected! Stopping robot.");
             }
 
             // Send commands to robot
@@ -209,7 +207,6 @@ void RosControllerNode::logData() {
 }
 
 void RosControllerNode::plotData() {
-    // FIX: Scrivi in /tmp per evitare errori di permessi/path
     std::string filename = "/tmp/" + robot_name_ + "_trajectory_data.txt";
     std::ofstream file(filename);
     if (file.is_open()) {

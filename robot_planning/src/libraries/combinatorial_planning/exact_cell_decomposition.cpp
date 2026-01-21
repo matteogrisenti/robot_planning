@@ -17,7 +17,7 @@ std::shared_ptr<Roadmap> exactCellDecomposition(const Map& map) {
     auto roadmap = std::make_shared<Roadmap>();
     roadmap->setMap(&map);
 
-    // --- 0. PREPARAZIONE TARGETS ---
+    // 0. Prepare targets
     std::vector<Point> targets;
     if (!map.gates.get_gates().empty()) {
         targets.push_back(map.gates.get_gates()[0].get_position());
@@ -39,7 +39,7 @@ std::shared_ptr<Roadmap> exactCellDecomposition(const Map& map) {
         trapIdToNodeId[i] = roadmap->addVertex(trapezoids[i].center);
     }
 
-    // Collega i target
+    // Connect targets
     for (const auto& p : targets) {
         Vertex t(p.x, p.y);
         int tNodeIdx = roadmap->addVertex(t);
@@ -67,8 +67,6 @@ std::shared_ptr<Roadmap> exactCellDecomposition(const Map& map) {
              if(nearest != -1) roadmap->addEdge(tNodeIdx, nearest, true);
         }
     }
-
-    // --- DEFINIZIONE VARIABILE MANCANTE ---
     double min_passage_width = 0.70; 
 
     // 4. Connect Trapezoids via Gateways
@@ -89,7 +87,7 @@ std::shared_ptr<Roadmap> exactCellDecomposition(const Map& map) {
             
             double passage_width = overlapEnd - overlapStart;
 
-            // CHECK LARGHEZZA PASSAGGIO
+            // Check passage width
             if (passage_width < min_passage_width) {
                 continue; 
             }
@@ -106,7 +104,6 @@ std::shared_ptr<Roadmap> exactCellDecomposition(const Map& map) {
     return roadmap;
 }
 
-// ... (Il resto del namespace HelperExactDecomposition rimane uguale) ...
 namespace HelperExactDecomposition {
     struct Segment {
         Point p1, p2;

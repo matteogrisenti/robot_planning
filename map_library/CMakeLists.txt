@@ -32,16 +32,12 @@ include_directories(
   ${OpenCV_INCLUDE_DIRS}
 )
 
-# Aggiungi qui i tuoi file sorgente della mappa (spostali da robot_planning a qui)
 add_library(map_library
   src/map_builder.cpp
   src/map_visualization.cpp
   src/map_data_structures.cpp
 )
 
-# --- FIX: Aggiungi questa dipendenza ---
-# Dice a CMake: "Non compilare map_library finché tutti i messaggi 
-# dei pacchetti dipendenti (come obstacles_msgs) non sono stati generati".
 add_dependencies(map_library ${catkin_EXPORTED_TARGETS})
 
 target_link_libraries(map_library

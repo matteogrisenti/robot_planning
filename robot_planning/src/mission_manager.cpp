@@ -16,7 +16,6 @@
 const double ROBOT_VELOCITY = 0.5;    
 const double TURNING_RADIUS = 0.5;    
 const int MAX_DUBINS_RETRIES = 3; 
-// Distanza minima tra waypoint inviati al controller (per evitare loop su nodi vicini)
 const double MIN_EXECUTION_DIST = 1.5; 
 
 MissionManager::MissionManager(ros::NodeHandle& nh) 
@@ -177,8 +176,8 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
         ros::Time t_start_exec = ros::Time::now();
         bool mission_failed = false;
 
-        // --- PATH PRUNING (CRUCIAL FOR MCR) ---
-        // Filters intermediate nodes BEFORE execution starts.
+        // --- PATH PRUNING ---
+        // Filters intermediate nodes before execution starts.
         std::vector<int> execPath;
         if (!fullGlobalPath.empty()) {
             execPath.push_back(fullGlobalPath[0]); // Keep Start
@@ -193,7 +192,6 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
                 bool isTarget = (targetsSet.find(currIdx) != targetsSet.end());
                 bool isLastNode = (k == fullGlobalPath.size() - 1);
                 
-                // Keep node if it's a Target, the very last node, or far enough
                 if (isTarget || isLastNode) {
                     execPath.push_back(currIdx);
                     lastKeptIdx = currIdx;
@@ -311,11 +309,8 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
                     
                     currentTargetSeqIdx++;
 
-                    // --- STOP LOGIC ---
                     if (isFinalGate) {
                         ROS_INFO("[MissionManager] Final Gate Reached. Mission Complete.");
-                        // The planner stops automatically (v=0) when goal is reached.
-                        // We wait 2 seconds to ensure the robot actually comes to a halt before the node exits.
                         ros::Duration(2.0).sleep();
                     }
                 }

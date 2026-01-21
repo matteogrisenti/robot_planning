@@ -29,20 +29,14 @@ namespace sample_planning {
         std::uniform_real_distribution<> disY(minY, maxY);
 
         int samples_added = 0;
-
-        // ==================================================================================
-        // NEW: INIEZIONE ESPLICITA TARGET (Start, Gate, Vittime)
-        // Inseriamo questi nodi PRIMA del random sampling per garantire che esistano nel grafo
-        // ==================================================================================
         
         // 1. Start
         roadmap->addVertex(Vertex(map.start.get_position().x, map.start.get_position().y));
         samples_added++;
 
-        // 2. Gate (se presente)
+        // 2. Gate 
         if (!map.gates.get_gates().empty()) {
             Point g = map.gates.get_gates()[0].get_position();
-            // Controlliamo la validità per sicurezza, ma li aggiungiamo prioritariamente
             Vertex gateV(g.x, g.y);
             if (isConfigurationFree(gateV, map)) {
                 roadmap->addVertex(gateV);
@@ -52,13 +46,11 @@ namespace sample_planning {
             }
         }
 
-        // 3. Vittime
+        // 3. Victims
         for (const auto& v : map.victims.get_victims()) {
             Point p = v.get_center();
             Vertex victimV(p.x, p.y);
             
-            // Nota: Le vittime sono spesso circondate da spazio libero per definizione, 
-            // ma un check veloce non fa male.
             if (isConfigurationFree(victimV, map)) {
                 roadmap->addVertex(victimV);
                 samples_added++;
@@ -73,8 +65,6 @@ namespace sample_planning {
 
         int max_attempts = config.num_samples * 100; // Safety break
         int attempts = 0;
-
-        // Riempiamo il resto del grafo fino a N campioni
         while (samples_added < config.num_samples && attempts < max_attempts) {
             attempts++;
             
@@ -94,7 +84,6 @@ namespace sample_planning {
         }
 
         // --- PHASE 2: CONNECTING ---
-        // Slide lines 7-17
 
         int num_vertices = roadmap->getNumVertices();
         int edges_added = 0;
@@ -102,25 +91,18 @@ namespace sample_planning {
         for (int i = 0; i < num_vertices; ++i) {
             const Vertex& q = roadmap->getVertex(i);
 
-            // 1. Find Neighbors (KNEAR)
+            // Find Neighbors (KNEAR)
             // Using the existing helper in Roadmap
             std::vector<int> neighbors = roadmap->findKNearestNeighbors(i, config.k_neighbors);
 
             for (int neighbor_idx : neighbors) {
-                // Avoid self-loops and duplicate checks (check only if i < neighbor_idx for undirected)
                 if (i >= neighbor_idx) continue;
 
                 const Vertex& q_near = roadmap->getVertex(neighbor_idx);
-
-                // Optional: Check max connection distance
                 if (config.max_connection_dist > 0 && q.distance(q_near) > config.max_connection_dist) {
                     continue;
                 }
-
-                // 2. Local Planner / Collision Check (PATH & COLLISION)
                 if (!PlanningUtils::lineSegmentIntersectsObstacle(q, q_near, map.obstacles.get_obstacles())) {
-                    
-                    // 3. Add Edge
                     roadmap->addEdge(i, neighbor_idx, true);
                     edges_added++;
                 }

@@ -13,11 +13,9 @@
 
 namespace GraphSearch {
 
-    // Struttura di supporto per A*
     struct NodeWrapper {
         int id;
         double f_score;
-        // Min-heap priority logic
         bool operator>(const NodeWrapper& other) const { return f_score > other.f_score; }
     };
 
@@ -81,8 +79,8 @@ namespace GraphSearch {
             const Vertex& startPos, 
             const std::vector<Victim>& victims, 
             const Vertex& gatePos,
-            double time_limit,       // Tempo massimo totale (s)
-            double robot_velocity    // Velocità media stimata (m/s)
+            double time_limit,       
+            double robot_velocity    
         );
 
 
@@ -97,8 +95,6 @@ namespace GraphSearch {
          */
         static double getGraphDistance(const Roadmap& graph, int startIdx, int endIdx);
     };
-
-
 
 
     class GraphPlanner {
@@ -119,8 +115,5 @@ namespace GraphSearch {
         );
     };
 
-
-
-    // Funzione di visualizzazione (definita in rviz_plot_plan.cpp)
     void rviz_plan(const std::vector<int>& path, const Roadmap& graph, const ros::Publisher& pub);
 }

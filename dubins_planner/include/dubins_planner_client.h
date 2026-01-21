@@ -18,7 +18,7 @@ private:
 
 public:
     /**
-     * @param name The name of the action server (must match server code: "follow_dubins_path")
+     * @param name The name of the action server 
      */
     DubinsClient(std::string name);
 

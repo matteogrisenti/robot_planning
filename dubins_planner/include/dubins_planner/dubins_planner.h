@@ -5,7 +5,7 @@
 #include <robot_control/Reference.h>
 #include <visualization_msgs/MarkerArray.h>
 
-// Include your custom libraries
+// Include custom libraries
 #include "dubins_planner/dubins_trajectory.h"
 #include "dubins_planner/collision_checker.h"
 #include "map_library/map_builder.h" 

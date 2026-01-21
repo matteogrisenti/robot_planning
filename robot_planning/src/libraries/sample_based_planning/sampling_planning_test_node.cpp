@@ -1,14 +1,11 @@
 #include <ros/ros.h>
 #include <memory>
 #include <string>
-#include <chrono>  // Per la misurazione del tempo
-#include <iomanip> // Per formattazione output
+#include <chrono>  // For time measurement
+#include <iomanip> // For output formatting
 
-// Include Map & Roadmap Infrastructure
 #include "map_library.h"
 #include "libraries/roadmap.h"
-
-// Include Sample-Based Algorithms
 #include "libraries/sample_based_planning.h"
 
 int main(int argc, char **argv)
@@ -19,7 +16,6 @@ int main(int argc, char **argv)
 
     ROS_INFO("=== Sample-Based Planning Test Node Started ===");
 
-    // Variabili per salvare i tempi
     double time_prm = 0.0;
     double time_rrt = 0.0;
     double time_rrt_star = 0.0;

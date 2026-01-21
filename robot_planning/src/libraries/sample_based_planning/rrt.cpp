@@ -8,7 +8,7 @@
 
 namespace sample_planning {
 
-    // Helper: Trova l'indice del nodo più vicino nel grafo
+    // Helper: Nearest Neighbor
     int getNearestNeighborIdx(const Roadmap& r, const Vertex& q_rand) {
         int nearestIdx = -1;
         double min_dist = std::numeric_limits<double>::max();
@@ -23,7 +23,7 @@ namespace sample_planning {
         return nearestIdx;
     }
 
-    // Helper: Muove un punto 'from' verso 'to' di una distanza massima 'step_size'
+    // Helper: Steer
     Vertex steer(const Vertex& from, const Vertex& to, double step_size) {
         double dist = from.distance(to);
         if (dist <= step_size) {
@@ -37,19 +37,15 @@ namespace sample_planning {
         }
     }
 
-    // Helper: Tenta di connettere un punto target (vittima/gate) all'albero esistente
+    // Helper: Final Connection
     void connectTargetToTree(Roadmap& roadmap, const Vertex& target, const std::vector<Obstacle>& obstacles) {
         int nearestIdx = getNearestNeighborIdx(roadmap, target);
         if (nearestIdx == -1) return;
 
         const Vertex& nearestNode = roadmap.getVertex(nearestIdx);
-
-        // Se la linea è libera, aggiungi il target al grafo e collegalo
         if (!PlanningUtils::lineSegmentIntersectsObstacle(nearestNode, target, obstacles)) {
-            // Verifica opzionale: evita duplicati se il target è già stato aggiunto (qui semplificato)
             int targetIdx = roadmap.addVertex(target);
-            roadmap.addEdge(nearestIdx, targetIdx, true); // Bidirezionale
-            // ROS_INFO("[RRT] Target connected to tree node %d", nearestIdx);
+            roadmap.addEdge(nearestIdx, targetIdx, true); // Bidirectional
         }
     }
 
@@ -57,7 +53,7 @@ namespace sample_planning {
         auto roadmap = std::make_shared<Roadmap>();
         roadmap->setMap(&map);
 
-        // 1. Inserisci Root (Start)
+        // Root (Start)
         Vertex startNode(map.start.get_position().x, map.start.get_position().y);
         roadmap->addVertex(startNode);
 
@@ -70,13 +66,12 @@ namespace sample_planning {
         std::uniform_real_distribution<> disY(minY, maxY);
         std::uniform_real_distribution<> disBias(0.0, 1.0);
 
-        // Cache Ostacoli e Bordi
+        // Cache Obstacles and Borders
         const auto& obstacles = map.obstacles.get_obstacles();
         std::vector<Vertex> borderPoly;
         for(const auto& bp : map.borders.get_points()) borderPoly.push_back(Vertex(bp.x, bp.y));
 
-        // --- PREPARAZIONE GOAL BIASING ---
-        // Raccogliamo tutti i target (Vittime + Gate) in un vettore
+        // Goal Biasing
         std::vector<Vertex> targets;
         if (!map.gates.get_gates().empty()) {
             Point g = map.gates.get_gates()[0].get_position();
@@ -86,28 +81,27 @@ namespace sample_planning {
             Point p = v.get_center();
             targets.push_back(Vertex(p.x, p.y));
         }
-        double goal_bias_prob = 0.10; // 10% probabilità di puntare a un target
-        // ---------------------------------
+        double goal_bias_prob = 0.10; // 10% prob of pointing to a target
 
-        // 2. Main Loop
+        // Main Loop
         for (int k = 0; k < config.max_iterations; ++k) {
             
             Vertex q_rand;
 
-            // STRATEGIA 1: GOAL BIASING
+            // Goal Biasing
             if (!targets.empty() && disBias(gen) < goal_bias_prob) {
-                // Scegli un target a caso
+                // Choose a target at random
                 int tIdx = std::rand() % targets.size();
                 q_rand = targets[tIdx];
             } else {
-                // Campionamento uniforme
+                // Uniform sampling
                 q_rand = Vertex(disX(gen), disY(gen));
                if (!PlanningUtils::isPointValid(q_rand.x, q_rand.y, map, 0.5)) {
                     continue; 
                 }
             }
 
-            // Check validità campione (CLEAR)
+            // Check validity
             if (!PlanningUtils::pointInPolygon(q_rand, borderPoly)) continue;
             if (PlanningUtils::pointInAnyObstacle(q_rand, obstacles)) continue; 
 
@@ -126,12 +120,12 @@ namespace sample_planning {
 
             // ADD VERTEX & EDGE
             int q_new_idx = roadmap->addVertex(q_new);
-            roadmap->addEdge(q_near_idx, q_new_idx, true); // Bidirezionale per A*
+            roadmap->addEdge(q_near_idx, q_new_idx, true); // Bidirectional
         }
 
-        // STRATEGIA 2: EXPLICIT TARGET CONNECTION
-        // Alla fine, proviamo a collegare tutti i target al ramo più vicino
-        // Questo garantisce che A* possa raggiungere esattamente la coordinata della vittima
+        // Explicit Target Connection
+        // At the end, try to connect all targets to the nearest branch
+        // This ensures that A* can reach the exact coordinates of the victim
         ROS_INFO("[RRT] Tree built (%d nodes). Connecting Targets...", roadmap->getNumVertices());
         for (const auto& t : targets) {
             connectTargetToTree(*roadmap, t, obstacles);

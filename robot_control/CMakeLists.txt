@@ -40,7 +40,6 @@ generate_messages(
 # ==============================================================================
 catkin_package(
   INCLUDE_DIRS include
-# LIBRARIES robot_control # Decommenta se altri pacchetti usano la tua lib
   CATKIN_DEPENDS 
     geometry_msgs 
     nav_msgs 
@@ -69,12 +68,10 @@ add_library(ros_controller_lib
   src/lyapunov_controller.cpp
   src/ros_controller_node.cpp
 )
-# CORREZIONE 2: Linkare le dipendenze alla libreria interna!
 target_link_libraries(ros_controller_lib
   ${catkin_LIBRARIES}
   ${Eigen3_LIBRARIES}
 )
-# Assicura che i messaggi custom siano generati prima di compilare la lib
 add_dependencies(ros_controller_lib ${catkin_EXPORTED_TARGETS})
 
 # ==============================================================================
@@ -88,7 +85,6 @@ target_link_libraries(main
   ${catkin_LIBRARIES}
   ${Eigen3_LIBRARIES}
 )
-# CORREZIONE 3: Usa ${catkin_EXPORTED_TARGETS} per aspettare TUTTI i messaggi (anche Action esterne)
 add_dependencies(main ${catkin_EXPORTED_TARGETS})
 
 
