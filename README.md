@@ -37,11 +37,16 @@ catkin_make
 source devel/setup.bash
 ```
 
-2.3 Run a specific planner (Example: RRT)
-```Bash
-rosrun robot_planning individual_benchmark_node _planner_type:=rrt _time_limit:=120.0
-```
+2.3 Run a specific planner 
 
+To test an example with combinatorial planner:
+```Bash
+rosrun robot_planning individual_benchmark_node _planner_type:=spr _time_limit:=120.0
+```
+To test an example with sample-based planner:
+```Bash
+rosrun robot_planning individual_benchmark_node _planner_type:=prm _time_limit:=120.0
+```
 
 ## 🛠 Benchmark Configuration
 Each run uses the individual_benchmark_node with the following parameters:
