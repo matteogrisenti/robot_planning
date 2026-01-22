@@ -73,7 +73,7 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
     try {
         ROS_INFO("[MissionManager] Started mission with planner '%s' and time limit %.1f s", planner_type.c_str(), time_limit);
         
-        // --- PHASE 1: ENVIRONMENT MODELING & ROADMAP ---
+        // --- ENVIRONMENT MODELING & ROADMAP ---
         map_builder::MapBuilder builder(nh_, 1000.0);
         ROS_INFO("[MissionManager] Building Map...");
         Map map = builder.buildMap();
@@ -108,7 +108,7 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
         metrics.t_roadmap = (ros::Time::now() - t_start_roadmap).toSec();
 
 
-        // --- PHASE 2 & 3: TASK PLANNING & PATH FINDING ---
+        // --- TASK PLANNING & PATH FINDING ---
         ros::Time t_start_plan = ros::Time::now(); 
         ROS_INFO("[MissionManager] Planning Mission Sequence...");
         
@@ -125,7 +125,7 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
         if (missionSequence.size() >= 2) {
             for (size_t i = 0; i < missionSequence.size() - 1; ++i) {
                 
-                // 3.1 GRAPH SEARCH (A*)
+                // GRAPH SEARCH (A*)
                 std::vector<int> rawSegment = GraphSearch::AStar::computePath(*roadmap, missionSequence[i], missionSequence[i+1]);
 
                 if (rawSegment.empty()) {
@@ -133,7 +133,7 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
                     continue; 
                 }
 
-                // 3.2 PATH OPTIMIZATION
+                // PATH OPTIMIZATION
                 bool isCriticalApproach = (i == missionSequence.size() - 2);
                 std::vector<int> segmentToAdd;
                 
@@ -156,11 +156,8 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
 
         // TOTAL PLANNING TIME
         metrics.t_total_planning = (ros::Time::now() - t_start_plan).toSec();
-
-        // Debug Visualization
         GraphSearch::rviz_plan(fullGlobalPath, *roadmap, debug_pub_);
 
-        // Save Snapshot
         try {
             roadmap_viz::RoadmapVisualizer viz;
             viz.render(map, *roadmap);
@@ -171,7 +168,7 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
         } catch (...) { ROS_WARN("[MissionManager] Visualization save failed."); }
 
 
-        // --- PHASE 4: REAL-TIME EXECUTION ---
+        // --- REAL-TIME EXECUTION ---
         ROS_INFO("[MissionManager] Starting Execution...");
         ros::Time t_start_exec = ros::Time::now();
         bool mission_failed = false;
@@ -205,7 +202,7 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
                         execPath.push_back(currIdx);
                         lastKeptIdx = currIdx;
                     } else {
-                        // Fallback: recupera nodo intermedio sicuro
+                      
                         int prevIdx = fullGlobalPath[k-1];
                         if (prevIdx != lastKeptIdx) {
                             execPath.push_back(prevIdx);
@@ -220,8 +217,6 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
             }
         }
 
-        // --- CORREZIONE CRITICA: SANITIZZAZIONE PATH ---
-        // Rimuove duplicati adiacenti (es. Gate -> Gate) che causano atan2(0,0)
         if (!execPath.empty()) {
             auto last = std::unique(execPath.begin(), execPath.end());
             execPath.erase(last, execPath.end());
@@ -239,7 +234,6 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
             const Vertex& currentV = roadmap->getVertex(currentIdx);
             const Vertex& targetV = roadmap->getVertex(nextIdx);
 
-            // CORREZIONE CRITICA: Check distanza zero
             double dist_seg = std::hypot(targetV.x - currentV.x, targetV.y - currentV.y);
             if (dist_seg < 0.01) {
                 ROS_WARN("[MissionManager] Skipping 0-length segment (Node %d -> %d)", currentIdx, nextIdx);

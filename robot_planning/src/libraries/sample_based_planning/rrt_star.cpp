@@ -7,10 +7,6 @@
 #include <ros/ros.h>
 
 namespace sample_planning {
-
-    // --- CONFIGURATION ---
-    // Definiamo un margine di sicurezza per il check volumetrico.
-    // Deve essere > del raggio del robot (es. 0.4) + margine.
     const double CHECK_CLEARANCE = 0.55;
 
     // Helper: Steer
@@ -35,13 +31,11 @@ namespace sample_planning {
         return nearestIdx;
     }
 
-    // Helper Final Connection
     void connectTargetToTree_s(Roadmap& roadmap, const Vertex& target, const std::vector<Obstacle>& obstacles) {
         int nearestIdx = getNearestNeighborIdx_s(roadmap, target);
         if (nearestIdx == -1) return;
         const Vertex& nearestNode = roadmap.getVertex(nearestIdx);
         
-        // CORREZIONE: Uso isSegmentSafe invece di lineSegmentIntersectsObstacle
         if (PlanningUtils::isSegmentSafe(nearestNode, target, obstacles, CHECK_CLEARANCE)) {
             int targetIdx = roadmap.addVertex(target);
             roadmap.addEdge(nearestIdx, targetIdx, true);
@@ -59,7 +53,6 @@ namespace sample_planning {
         
         std::vector<NodeData> tree_data;
 
-        // 1. Init
         Vertex startNode(map.start.get_position().x, map.start.get_position().y);
         roadmap->addVertex(startNode);
         tree_data.push_back({0.0, -1});
@@ -88,18 +81,16 @@ namespace sample_planning {
             targets.push_back(Vertex(p.x, p.y));
         }
         double goal_bias_prob = 0.10; 
-        // ---------------------------------
 
         for (int k = 0; k < config.max_iterations; ++k) {
             
-            // 2. Sampling 
+            // Sampling 
             Vertex q_rand;
             if (!targets.empty() && disBias(gen) < goal_bias_prob) {
                 int tIdx = std::rand() % targets.size();
                 q_rand = targets[tIdx];
             } else {
                 q_rand = Vertex(disX(gen), disY(gen));
-                // Validità del punto (statica)
                 if (!PlanningUtils::isPointValid(q_rand.x, q_rand.y, map, CHECK_CLEARANCE)) {
                     continue; 
                 }
@@ -116,17 +107,16 @@ namespace sample_planning {
             Vertex q_near = roadmap->getVertex(q_near_idx);
             Vertex q_new = steer_s(q_near, q_rand, config.step_size);
 
-            // 3. Check Validity
+            // Check Validity
             if (!PlanningUtils::isPointValid(q_new.x, q_new.y, map, CHECK_CLEARANCE)) {
                 continue;
             }
             
-            // CORREZIONE: Check validità segmento (Volume)
             if (!PlanningUtils::isSegmentSafe(q_near, q_new, obstacles, CHECK_CLEARANCE)) continue;
 
             // --- RRT* START ---
 
-            // A. Find Neighbors
+            // Find Neighbors
             std::vector<int> X_near;
             for (int i = 0; i < roadmap->getNumVertices(); ++i) {
                 if (roadmap->getVertex(i).distance(q_new) <= config.search_radius) {
@@ -134,7 +124,7 @@ namespace sample_planning {
                 }
             }
 
-            // B. Parent Selection (Choose Best Parent)
+            // Parent Selection (Choose Best Parent)
             int q_min_idx = q_near_idx;
             double c_min = tree_data[q_near_idx].cost + q_near.distance(q_new);
 
@@ -143,7 +133,7 @@ namespace sample_planning {
                 double c_potential = tree_data[x_near_idx].cost + x_near.distance(q_new);
                 
                 if (c_potential < c_min) {
-                    // CORREZIONE: Check validità segmento per potenziale padre
+                    
                     if (PlanningUtils::isSegmentSafe(x_near, q_new, obstacles, CHECK_CLEARANCE)) {
                         c_min = c_potential;
                         q_min_idx = x_near_idx;
@@ -156,7 +146,7 @@ namespace sample_planning {
             tree_data.push_back({c_min, q_min_idx});
             roadmap->addEdge(q_min_idx, q_new_idx, true);
 
-            // C. Rewiring
+            // Rewiring
             for (int x_near_idx : X_near) {
                 if (x_near_idx == q_min_idx) continue; // Skip parent
 
@@ -164,7 +154,7 @@ namespace sample_planning {
                 double new_cost_via_q_new = tree_data[q_new_idx].cost + q_new.distance(x_near);
 
                 if (new_cost_via_q_new < tree_data[x_near_idx].cost) {
-                     // CORREZIONE: Check validità segmento per rewiring
+                     
                      if (PlanningUtils::isSegmentSafe(q_new, x_near, obstacles, CHECK_CLEARANCE)) {
    
                          int old_parent = tree_data[x_near_idx].parent;
