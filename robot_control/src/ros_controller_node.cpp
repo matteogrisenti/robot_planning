@@ -11,6 +11,7 @@ RosControllerNode::RosControllerNode(const std::string& robot_name, bool debug)
 // Destructor
 RosControllerNode::~RosControllerNode() {
     sendCommands(0.0, 0.0);
+    usleep(100000);
     if (debug_) {
         plotData();
     }
@@ -173,7 +174,9 @@ void RosControllerNode::receivePose(const nav_msgs::Odometry::ConstPtr& msg) {
 
 void RosControllerNode::receiveReference(const robot_control::Reference::ConstPtr& msg) {
     if (msg->plan_finished) {
-        // ROS_INFO("[Controller] Controller finish, plotting data...");
+        v_d_ = 0.0;
+        omega_d_ = 0.0;
+        des_theta_ = base_pose_w_(5);
         plotData();
     } else {    
         des_x_ = msg->x_d;

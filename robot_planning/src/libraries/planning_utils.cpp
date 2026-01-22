@@ -165,6 +165,7 @@ namespace PlanningUtils {
             return; 
         }
         int newIdx = roadmap->addVertex(pos);
+        double search_radius = 15.0;                        // Search radius for neighbors
         std::vector<std::pair<double, int>> neighbors;
         for (int i = 0; i < roadmap->getNumVertices(); ++i) {
             if (i == newIdx) continue;  

@@ -17,6 +17,7 @@ const double ROBOT_VELOCITY = 0.5;
 const double TURNING_RADIUS = 0.5;    
 const int MAX_DUBINS_RETRIES = 3; 
 const double MIN_EXECUTION_DIST = 1.5; 
+const double PRUNING_SAFETY_CLEARANCE = 0.55; 
 
 MissionManager::MissionManager(ros::NodeHandle& nh) 
     : nh_(nh), current_speed_(0.0), current_pose_odom_(0,0), odom_active_(false) {
@@ -54,7 +55,6 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
     metrics.dubins_retries = 0;
     metrics.success = false;
     
-    // Init timer values (Standard, no detailed breakdown to avoid compilation errors)
     metrics.t_roadmap = 0.0;
     metrics.t_total_planning = 0.0;
     metrics.t_execution = 0.0;
@@ -177,38 +177,58 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
         bool mission_failed = false;
 
         // --- PATH PRUNING ---
-        // Filters intermediate nodes before execution starts.
         std::vector<int> execPath;
         if (!fullGlobalPath.empty()) {
-            execPath.push_back(fullGlobalPath[0]); // Keep Start
+            execPath.push_back(fullGlobalPath[0]); 
             int lastKeptIdx = fullGlobalPath[0];
             
-            // Fast lookup for critical targets
             std::set<int> targetsSet(missionSequence.begin(), missionSequence.end());
 
             for (size_t k = 1; k < fullGlobalPath.size(); ++k) {
                 int currIdx = fullGlobalPath[k];
-                
                 bool isTarget = (targetsSet.find(currIdx) != targetsSet.end());
                 bool isLastNode = (k == fullGlobalPath.size() - 1);
+                bool shouldAttemptAdd = (isTarget || isLastNode);
                 
-                if (isTarget || isLastNode) {
-                    execPath.push_back(currIdx);
-                    lastKeptIdx = currIdx;
-                } else {
+                if (!shouldAttemptAdd) {
+                     const Vertex& vLast = roadmap->getVertex(lastKeptIdx);
+                     const Vertex& vCurr = roadmap->getVertex(currIdx);
+                     double dist = std::hypot(vCurr.x - vLast.x, vCurr.y - vLast.y);
+                     if (dist >= MIN_EXECUTION_DIST) shouldAttemptAdd = true;
+                }
+
+                if (shouldAttemptAdd) {
                     const Vertex& vLast = roadmap->getVertex(lastKeptIdx);
                     const Vertex& vCurr = roadmap->getVertex(currIdx);
-                    double dist = std::hypot(vCurr.x - vLast.x, vCurr.y - vLast.y);
-                    
-                    if (dist >= MIN_EXECUTION_DIST) {
+
+                    if (PlanningUtils::isSegmentSafe(vLast, vCurr, map.obstacles.get_obstacles(), PRUNING_SAFETY_CLEARANCE)) {
                         execPath.push_back(currIdx);
                         lastKeptIdx = currIdx;
+                    } else {
+                        // Fallback: recupera nodo intermedio sicuro
+                        int prevIdx = fullGlobalPath[k-1];
+                        if (prevIdx != lastKeptIdx) {
+                            execPath.push_back(prevIdx);
+                            lastKeptIdx = prevIdx;
+                        }
+                        if (isTarget || isLastNode) {
+                            execPath.push_back(currIdx);
+                            lastKeptIdx = currIdx;
+                        } 
                     }
                 }
             }
         }
-        ROS_INFO("[MissionManager] Path Pruned: %lu -> %lu nodes (Min Dist: %.1fm)", 
-                 fullGlobalPath.size(), execPath.size(), MIN_EXECUTION_DIST);
+
+        // --- CORREZIONE CRITICA: SANITIZZAZIONE PATH ---
+        // Rimuove duplicati adiacenti (es. Gate -> Gate) che causano atan2(0,0)
+        if (!execPath.empty()) {
+            auto last = std::unique(execPath.begin(), execPath.end());
+            execPath.erase(last, execPath.end());
+        }
+
+        ROS_INFO("[MissionManager] Path Pruned & Sanitized: %lu -> %lu nodes", 
+                 fullGlobalPath.size(), execPath.size());
 
         // --- EXECUTION LOOP ---
         size_t currentTargetSeqIdx = 1; 
@@ -219,14 +239,18 @@ RunMetrics MissionManager::run(const std::string& planner_type, double time_limi
             const Vertex& currentV = roadmap->getVertex(currentIdx);
             const Vertex& targetV = roadmap->getVertex(nextIdx);
 
+            // CORREZIONE CRITICA: Check distanza zero
+            double dist_seg = std::hypot(targetV.x - currentV.x, targetV.y - currentV.y);
+            if (dist_seg < 0.01) {
+                ROS_WARN("[MissionManager] Skipping 0-length segment (Node %d -> %d)", currentIdx, nextIdx);
+                continue; 
+            }
+
             bool isCurrentMissionTarget = (currentTargetSeqIdx < missionSequence.size() && 
                                            nextIdx == missionSequence[currentTargetSeqIdx]);
             
-            // Check if this is the final segment of the entire path
             bool isEndOfPath = (i == execPath.size() - 2);
             bool isFinalGate = (isCurrentMissionTarget && currentTargetSeqIdx == missionSequence.size() - 1);
-            
-            // Safety: Force final gate behavior if we are at the end of the pruned path
             if (isEndOfPath) isFinalGate = true;
 
             double goal_theta = 0.0;

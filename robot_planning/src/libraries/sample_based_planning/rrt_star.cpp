@@ -8,6 +8,11 @@
 
 namespace sample_planning {
 
+    // --- CONFIGURATION ---
+    // Definiamo un margine di sicurezza per il check volumetrico.
+    // Deve essere > del raggio del robot (es. 0.4) + margine.
+    const double CHECK_CLEARANCE = 0.55;
+
     // Helper: Steer
     Vertex steer_s(const Vertex& from, const Vertex& to, double step_size) {
         double dist = from.distance(to);
@@ -35,7 +40,9 @@ namespace sample_planning {
         int nearestIdx = getNearestNeighborIdx_s(roadmap, target);
         if (nearestIdx == -1) return;
         const Vertex& nearestNode = roadmap.getVertex(nearestIdx);
-        if (!PlanningUtils::lineSegmentIntersectsObstacle(nearestNode, target, obstacles)) {
+        
+        // CORREZIONE: Uso isSegmentSafe invece di lineSegmentIntersectsObstacle
+        if (PlanningUtils::isSegmentSafe(nearestNode, target, obstacles, CHECK_CLEARANCE)) {
             int targetIdx = roadmap.addVertex(target);
             roadmap.addEdge(nearestIdx, targetIdx, true);
         }
@@ -92,7 +99,8 @@ namespace sample_planning {
                 q_rand = targets[tIdx];
             } else {
                 q_rand = Vertex(disX(gen), disY(gen));
-                if (!PlanningUtils::isPointValid(q_rand.x, q_rand.y, map, 0.5)) {
+                // Validità del punto (statica)
+                if (!PlanningUtils::isPointValid(q_rand.x, q_rand.y, map, CHECK_CLEARANCE)) {
                     continue; 
                 }
             }
@@ -109,10 +117,12 @@ namespace sample_planning {
             Vertex q_new = steer_s(q_near, q_rand, config.step_size);
 
             // 3. Check Validity
-            if (!PlanningUtils::isPointValid(q_new.x, q_new.y, map, 0.5)) {
+            if (!PlanningUtils::isPointValid(q_new.x, q_new.y, map, CHECK_CLEARANCE)) {
                 continue;
             }
-            if (PlanningUtils::lineSegmentIntersectsObstacle(q_near, q_new, obstacles)) continue;
+            
+            // CORREZIONE: Check validità segmento (Volume)
+            if (!PlanningUtils::isSegmentSafe(q_near, q_new, obstacles, CHECK_CLEARANCE)) continue;
 
             // --- RRT* START ---
 
@@ -133,7 +143,8 @@ namespace sample_planning {
                 double c_potential = tree_data[x_near_idx].cost + x_near.distance(q_new);
                 
                 if (c_potential < c_min) {
-                    if (!PlanningUtils::lineSegmentIntersectsObstacle(x_near, q_new, obstacles)) {
+                    // CORREZIONE: Check validità segmento per potenziale padre
+                    if (PlanningUtils::isSegmentSafe(x_near, q_new, obstacles, CHECK_CLEARANCE)) {
                         c_min = c_potential;
                         q_min_idx = x_near_idx;
                     }
@@ -153,7 +164,8 @@ namespace sample_planning {
                 double new_cost_via_q_new = tree_data[q_new_idx].cost + q_new.distance(x_near);
 
                 if (new_cost_via_q_new < tree_data[x_near_idx].cost) {
-                     if (!PlanningUtils::lineSegmentIntersectsObstacle(q_new, x_near, obstacles)) {
+                     // CORREZIONE: Check validità segmento per rewiring
+                     if (PlanningUtils::isSegmentSafe(q_new, x_near, obstacles, CHECK_CLEARANCE)) {
    
                          int old_parent = tree_data[x_near_idx].parent;
                          if (old_parent != -1) {
