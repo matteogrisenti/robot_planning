@@ -1,7 +1,7 @@
 #include "libraries/graph_search.h"
 #include "libraries/planning_utils.h"
 #include <iostream>
-#include <ros/ros.h> // Per logging
+#include <ros/ros.h> 
 
 namespace GraphSearch {
 
@@ -9,29 +9,25 @@ namespace GraphSearch {
     // AStar Implementation
     // =========================================================================
     double AStar::heuristic(const Vertex& a, const Vertex& b) {
-        // Standard distance formula: sqrt((x2-x1)^2 + (y2-y1)^2)
         return std::sqrt(std::pow(a.x - b.x, 2) + std::pow(a.y - b.y, 2));
     }
 
     std::vector<int> AStar::computePath(const Roadmap& graph, int startNodeIdx, int goalNodeIdx) {
-        // 1. EDGE CASE HANDLING
+        // EDGE CASE HANDLING
         if (startNodeIdx < 0 || goalNodeIdx < 0) return {};         // Invalid indices
         if (startNodeIdx == goalNodeIdx) return {startNodeIdx};     // Start is the goal
 
-        // 2. DATA STRUCTURES
-        // Open Set: A priority queue that stores task to be explored.
-        // It is ordered by the f_score (lowest cost first).
+        // DATA STRUCTURES
         std::priority_queue<NodeWrapper, std::vector<NodeWrapper>, std::greater<NodeWrapper>> open_set;
         std::map<int, double> g_score;
-        std::map<int, int> came_from;   // Came From: A map used to store the "parent" of each node to reconstruct the final path.
-
+        std::map<int, int> came_from;   
         const Vertex& goalVertex = graph.getVertex(goalNodeIdx);
         
-        // 3. INITIALIZATION
+        // INITIALIZATION
         g_score[startNodeIdx] = 0.0;
         open_set.push({startNodeIdx, heuristic(graph.getVertex(startNodeIdx), goalVertex)});
 
-        // 4. MAIN SEARCH LOOP
+        // MAIN SEARCH LOOP
         while (!open_set.empty()) {
             // Extract the node with the lowest f_score (highest priority)
             int u = open_set.top().id;
@@ -51,7 +47,7 @@ namespace GraphSearch {
                 return path;
             }
 
-            // 5. NEIGHBOR EXPANSION
+            // NEIGHBOR EXPANSION
             // Iterate through all neighbors connected to node 'u'
             for (const auto& edge : graph.getEdges(u)) {
                 int v = edge.targetVertex;
@@ -75,8 +71,6 @@ namespace GraphSearch {
                 }
             }
         }
-
-        // 6. TERMINATION: If the queue is empty and goal was never reached
         return {}; 
     }
 
@@ -102,16 +96,13 @@ namespace GraphSearch {
         return bestIdx;
     }
 
-
-
-    // Calcola la distanza effettiva sul grafo (usando A*) per stime precise dei tempi
     double TaskPlanner::getGraphDistance(const Roadmap& graph, int startIdx, int endIdx) {
         if (startIdx == endIdx) return 0.0;
         
         // Run the A* algorithm to find the sequence of nodes
         std::vector<int> path = AStar::computePath(graph, startIdx, endIdx);
         
-        if (path.empty()) return 1e9; // Infinito (irraggiungibile)
+        if (path.empty()) return 1e9; 
         
         double dist = 0.0;
         for (size_t i = 0; i < path.size() - 1; ++i) {
@@ -129,8 +120,6 @@ namespace GraphSearch {
                                                       double time_limit, double robot_velocity) {
         std::vector<int> sequence;
         
-        // 1. INITIAL MAPPING
-        // Convert spatial coordinates (Start and Gate) to the nearest roadmap nodes
         int startNode = getNearestNodeIdx(graph, startPos);
         int gateNode = getNearestNodeIdx(graph, gatePos);
 
@@ -139,8 +128,6 @@ namespace GraphSearch {
             return {};
         }
 
-        // 2. CANDIDATE PREPARATION
-        // Wrap victim data into a local structure for easier tracking
         struct Candidate { 
             int nodeIdx;      // Closest graph node index
             int originalIdx;  // ID for logging purposes
@@ -151,12 +138,10 @@ namespace GraphSearch {
         std::vector<Candidate> candidates;
         for(size_t i=0; i<victims.size(); ++i) {
             Point p = victims[i].get_center(); 
-            // Scoring logic: Larger victims (higher radius) are prioritized
             double val = victims[i].get_radius(); 
             candidates.push_back({getNearestNodeIdx(graph, Vertex(p.x, p.y)), (int)i, val, false});
         }
 
-        // 3. GREEDY SELECTION LOOP
         sequence.push_back(startNode);
         int currentNode = startNode;
         double currentTime = 0.0;
@@ -181,28 +166,23 @@ namespace GraphSearch {
                     // Skip victims that are disconnected from the roadmap
                     if (distToVictim > 1e8 || distToGate > 1e8) continue;
 
-                    // Robot velocity è già ridotta del 15% per sicurezza (nel benchmark)
                     double timeToVictim = distToVictim / robot_velocity;
                     double timeToExit = distToGate / robot_velocity;
-
-                    // --- CHECK DEL BUDGET ---
                     double projectedTotalTime = currentTime + timeToVictim + timeToExit;
 
                     if (projectedTotalTime <= time_limit) {
-                        
-                        // --- EURISTICA DI SELEZIONE ---
+                     
                         double score = candidates[i].value / (timeToVictim + timeToExit); 
                         
                         if (score > bestScore) {
                             bestScore = score;
                             bestIdx = i;
-                            timeConsumedForBest = timeToVictim; // Tempo per arrivare alla vittima (non per uscire)
+                            timeConsumedForBest = timeToVictim; 
                         }
                     }
                 }
             }
 
-            // 4. SEQUENCE UPDATE
             if (bestIdx != -1) {
                 // Add the best candidate found in this iteration
                 sequence.push_back(candidates[bestIdx].nodeIdx);
@@ -219,8 +199,6 @@ namespace GraphSearch {
             }
         }
         
-        // 5. MISSION FINALIZATION
-        // The gate is always the final destination of the sequence
         sequence.push_back(gateNode);
         
         // Final check for debug logs
@@ -260,7 +238,6 @@ namespace GraphSearch {
             }
 
             // 2. Optimization Logic
-            // If approaching the final target (Gate), do not optimize/shortcut to ensure safe alignment.
             bool isCriticalApproach = (i == missionSequence.size() - 2);
             
             std::vector<int> segmentToAdd;

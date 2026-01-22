@@ -1,5 +1,5 @@
 #include "dubins_planner/dubins_planner.h"
-#include <algorithm> // Necessario per std::sort
+#include <algorithm> 
 
 DubinsPlanner::DubinsPlanner()
     : nh_("~"), 
@@ -48,7 +48,7 @@ bool DubinsPlanner::planPath(double start_x, double start_y, double start_th,
     // Re-initialize solver with current turning radius
     solver_ = Kinematics::DubinsSolver(1.0 / rho);
 
-    // Get ALL candidates (usually 6) instead of just top 3 to filter properly
+   
     std::vector<Kinematics::Trajectory> candidates;
     solver_.compute_candidates(start, goal, 6, candidates);
 
@@ -60,18 +60,13 @@ bool DubinsPlanner::planPath(double start_x, double start_y, double start_th,
     current_segment_index_ = 0;     // Reset execution index
     plan_valid_ = false;            // Reset plan validity
 
-    // --- FIX LOOP 360 GRADI & COMPILATION ERROR ---
-    // Ordiniamo i candidati per penalizzare i percorsi "Curve-Curve-Curve" (CCC) che creano loop.
-    // I path RLR e LRL sono quelli che causano giri su se stessi.
     std::sort(candidates.begin(), candidates.end(), [](const Kinematics::Trajectory& a, const Kinematics::Trajectory& b) {
-        // FIX COMPILAZIONE: Controllo esplicito dei tipi enum invece di usare >= int
+
         bool a_is_loop = (a.type == Kinematics::PathType::RLR || a.type == Kinematics::PathType::LRL);
         bool b_is_loop = (b.type == Kinematics::PathType::RLR || b.type == Kinematics::PathType::LRL);
         
-        // Se uno è un loop e l'altro no, vince quello che NON è un loop
         if (a_is_loop != b_is_loop) return !a_is_loop;
         
-        // Altrimenti vince il più corto
         return a.total_length < b.total_length;
     });
 
@@ -81,12 +76,11 @@ bool DubinsPlanner::planPath(double start_x, double start_y, double start_th,
         
         // Check collision for this specific trajectory
         if (collision_checker_.is_dubins_path_valid(traj)) {
-            // Found a valid one!
             current_path_ = traj;
             plan_valid_ = true;
             ROS_INFO("[DubinsPlanner] Selected Candidate #%lu (Type: %d, Length: %.2f)", 
                      i + 1, (int)current_path_.type, current_path_.total_length);
-            break; // Stop checking, we found the best valid one
+            break;
         } else {
             // ROS_INFO("[DubinsPlanner] Candidate #%lu Collides...", i + 1);
         }
@@ -94,7 +88,6 @@ bool DubinsPlanner::planPath(double start_x, double start_y, double start_th,
 
     if (!plan_valid_) {
         ROS_WARN("[DubinsPlanner] All candidates collided!");
-        // Optionally, assign the first candidate to current_path_ just for debug visualization (in RED)
         current_path_ = candidates[0]; 
     }
 
